@@ -1,0 +1,9 @@
+{
+  "name": "muteone",
+  "version": "1.0.0",
+  "dependencies": {
+    "node-fetch": "^2.6.7",
+    "form-data": "^4.0.0",
+    "multer": "^1.4.5"
+  }
+}
