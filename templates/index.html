@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MuteOne</title>
+    <meta name="description" content="Remove vocals, drums, bass, or other instruments from any song">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: { 500: '#358dff', 600: '#1e70f0' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background: rgb(2 6 23); color: rgb(241 245 249); }
+        .btn { @apply inline-flex items-center justify-center rounded-xl px-4 py-2 font-medium shadow transition active:translate-y-px; }
+        .btn-primary { background: #358dff; color: white; }
+        .btn-primary:hover { background: #1e70f0; }
+        .btn-ghost { background: rgba(255,255,255,0.1); color: white; }
+        .btn-ghost:hover { background: rgba(255,255,255,0.15); }
+        .card { @apply rounded-2xl border backdrop-blur; background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); }
+        .input { @apply w-full rounded-xl border px-3 py-2 outline-none; background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.1); color: white; }
+        .input::placeholder { color: rgba(255,255,255,0.5); }
+        .badge { @apply inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs; background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.8); }
+    </style>
+</head>
+<body>
+    <div class="min-h-screen flex flex-col">
+        <header class="px-6 py-4">
+            <div class="mx-auto max-w-4xl flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <span class="text-xl font-semibold tracking-tight">🎵 MuteOne</span>
+                </div>
+                <a class="btn btn-ghost" href="https://muteone.com">muteone.com</a>
+            </div>
+        </header>
+        
+        <main class="flex-1 px-6 pb-16">
+            <div class="mx-auto max-w-4xl">
+                <div class="min-h-screen flex items-center justify-center p-4 sm:p-6">
+                    <div class="w-full max-w-md sm:max-w-xl space-y-4 sm:space-y-6">
+                        <div class="text-center space-y-2">
+                            <h1 class="text-2xl sm:text-3xl font-bold">MuteOne</h1>
+                            <p class="text-sm sm:text-base text-gray-400">
+                                Remove vocals, drums, bass, or other instruments from any song
+                            </p>
+                        </div>
+
+                        <div class="card p-4 sm:p-6 space-y-4">
+                            <form id="uploadForm" enctype="multipart/form-data">
+                                <div class="space-y-2">
+                                    <label class="text-sm font-medium text-gray-300">Upload Audio File</label>
+                                    <input
+                                        class="input h-12 text-base"
+                                        type="file"
+                                        id="audioFile"
+                                        name="file"
+                                        accept="audio/*,.mp3,.wav,.m4a,.flac,.ogg"
+                                        required
+                                    />
+                                    <div id="fileInfo" class="text-xs text-green-400 break-words hidden"></div>
+                                </div>
+
+                                <div class="space-y-2 mt-4">
+                                    <label class="text-sm font-medium text-gray-300">Remove</label>
+                                    <select
+                                        class="input h-12 text-base"
+                                        id="removeSelect"
+                                        name="remove"
+                                        required
+                                    >
+                                        <option value="vocals">Vocals</option>
+                                        <option value="bass">Bass</option>
+                                        <option value="drums">Drums</option>
+                                        <option value="other">Other instruments</option>
+                                    </select>
+                                </div>
+
+                                <button
+                                    type="submit"
+                                    id="processBtn"
+                                    class="btn btn-primary w-full h-12 text-base font-semibold mt-4 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    Remove Stem
+                                </button>
+                            </form>
+
+                            <div id="statusDiv" class="hidden p-3 rounded-lg border">
+                                <p id="statusText" class="text-sm break-words"></p>
+                                <div id="progressBar" class="w-full bg-gray-700 rounded-full h-2 mt-2 hidden">
+                                    <div id="progressFill" class="bg-blue-500 h-2 rounded-full transition-all duration-1000" style="width: 0%"></div>
+                                </div>
+                            </div>
+
+                            <div id="downloadDiv" class="pt-2 hidden">
+                                <button 
+                                    id="downloadBtn"
+                                    class="btn btn-primary w-full h-12 text-base font-semibold"
+                                >
+                                    📥 Download Your Track
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="text-center text-xs sm:text-sm text-gray-500 space-y-1">
+                            <p><strong>⚠️ Files must be under 10MB</strong></p>
+                            <p>Processing typically takes 2-5 minutes depending on song length.</p>
+                            <p class="break-words">Supported formats: MP3, WAV, M4A, FLAC, OGG</p>
+                            <p class="text-gray-600">🚀 Now powered by Demucs AI for professional quality!</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+        
+        <footer class="px-6 py-8 text-center text-white/60 text-sm">
+            All processing runs in the background. You'll get a download link when it's ready.
+        </footer>
+    </div>
+
+    <script>
+        let currentJobId = null;
+        let pollInterval = null;
+
+        document.getElementById('audioFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            const fileInfo = document.getElementById('fileInfo');
+            
+            if (file) {
+                // Check file size (10MB limit)
+                if (file.size > 10 * 1024 * 1024) {
+                    alert('File too large. Please choose a file under 10MB.');
+                    e.target.value = '';
+                    fileInfo.classList.add('hidden');
+                    return;
+                }
+                
+                fileInfo.textContent = `✅ Selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB)`;
+                fileInfo.classList.remove('hidden');
+            } else {
+                fileInfo.classList.add('hidden');
+            }
+        });
+
+        document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const statusDiv = document.getElementById('statusDiv');
+            const statusText = document.getElementById('statusText');
+            const processBtn = document.getElementById('processBtn');
+            const downloadDiv = document.getElementById('downloadDiv');
+            
+            // Reset UI
+            statusDiv.classList.remove('hidden');
+            downloadDiv.classList.add('hidden');
+            processBtn.disabled = true;
+            processBtn.textContent = 'Processing...';
+            
+            try {
+                // Start processing
+                statusText.textContent = '📤 Uploading and starting AI processing...';
+                statusDiv.className = 'p-3 rounded-lg border bg-white/5 border-white/10 text-gray-300';
+                
+                const response = await fetch('/api/process', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Processing failed');
+                }
+                
+                const result = await response.json();
+                currentJobId = result.jobId;
+                
+                // Start polling for status
+                startPolling();
+                
+            } catch (error) {
+                console.error('Error:', error);
+                statusText.textContent = `❌ Error: ${error.message}`;
+                statusDiv.className = 'p-3 rounded-lg border bg-red-500/10 border-red-500/20 text-red-300';
+                processBtn.disabled = false;
+                processBtn.textContent = 'Remove Stem';
+            }
+        });
+
+        function startPolling() {
+            const statusText = document.getElementById('statusText');
+            const progressBar = document.getElementById('progressBar');
+            const progressFill = document.getElementById('progressFill');
+            
+            progressBar.classList.remove('hidden');
+            let progress = 0;
+            
+            pollInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/api/status/${currentJobId}`);
+                    if (!response.ok) throw new Error('Status check failed');
+                    
+                    const status = await response.json();
+                    statusText.textContent = status.message;
+                    
+                    // Simulate progress
+                    if (status.status === 'processing') {
+                        progress = Math.min(progress + Math.random() * 10, 90);
+                        progressFill.style.width = progress + '%';
+                    } else if (status.status === 'completed') {
+                        progressFill.style.width = '100%';
+                        setTimeout(() => {
+                            showDownloadButton();
+                            clearInterval(pollInterval);
+                        }, 500);
+                    } else if (status.status === 'failed') {
+                        statusText.textContent = `❌ ${status.message}`;
+                        document.getElementById('statusDiv').className = 'p-3 rounded-lg border bg-red-500/10 border-red-500/20 text-red-300';
+                        progressBar.classList.add('hidden');
+                        resetForm();
+                        clearInterval(pollInterval);
+                    }
+                    
+                } catch (error) {
+                    console.error('Polling error:', error);
+                    statusText.textContent = '❌ Error checking status. Please try again.';
+                    document.getElementById('statusDiv').className = 'p-3 rounded-lg border bg-red-500/10 border-red-500/20 text-red-300';
+                    resetForm();
+                    clearInterval(pollInterval);
+                }
+            }, 3000); // Poll every 3 seconds
+        }
+
+        function showDownloadButton() {
+            const statusDiv = document.getElementById('statusDiv');
+            const statusText = document.getElementById('statusText');
+            const downloadDiv = document.getElementById('downloadDiv');
+            const downloadBtn = document.getElementById('downloadBtn');
+            const progressBar = document.getElementById('progressBar');
+            
+            statusText.textContent = '✅ Complete! Your track is ready for download.';
+            statusDiv.className = 'p-3 rounded-lg border bg-green-500/10 border-green-500/20 text-green-300';
+            progressBar.classList.add('hidden');
+            downloadDiv.classList.remove('hidden');
+            
+            downloadBtn.onclick = function() {
+                window.location.href = `/api/download/${currentJobId}`;
+                setTimeout(resetForm, 1000); // Reset form after download starts
+            };
+        }
+
+        function resetForm() {
+            const processBtn = document.getElementById('processBtn');
+            processBtn.disabled = false;
+            processBtn.textContent = 'Remove Stem';
+            currentJobId = null;
+        }
+    </script>
+</body>
+</html>
