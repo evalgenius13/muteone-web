@@ -1,23 +1,53 @@
-\# Ultra-minimal version using lighter separation
+# Use Python 3.11 slim base image
 FROM python:3.11-slim
 
-# Install only FFmpeg
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TORCH_HOME=/tmp/torch
+ENV HF_HOME=/tmp/huggingface
+
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
+    gcc \
+    g++ \
+    make \
+    wget \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
+# Set working directory
 WORKDIR /app
 
-# Install minimal Python deps
-RUN pip install --no-cache-dir \
-    Flask==2.3.3 \
-    numpy==1.24.3 \
-    soundfile==0.12.1 \
-    gunicorn==21.2.0
+# Create cache directories
+RUN mkdir -p /tmp/torch /tmp/huggingface
 
-# Copy application
-COPY app_minimal.py app.py
+# Copy requirements file
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Copy application files
+COPY app.py .
 COPY templates/ templates/
 
+# Create necessary directories
+RUN mkdir -p /tmp/uploads /tmp/results
+
+# Set proper permissions
+RUN chmod -R 777 /tmp/
+
+# Expose port
 EXPOSE 5000
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--timeout", "300", "app:app"]
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:5000/ || exit 1
+
+# Start the application
+CMD ["python", "app.py"]
