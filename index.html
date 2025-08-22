@@ -3,107 +3,550 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MuteOne</title>
-    <meta name="description" content="Remove one instrument, keep the rest">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        brand: { 500: '#358dff', 600: '#1e70f0' }
-                    }
-                }
-            }
-        }
-    </script>
+    <title>MuteOne - AI Audio Separation</title>
     <style>
-        body { background: rgb(2 6 23); color: rgb(241 245 249); }
-        .btn { @apply inline-flex items-center justify-center rounded-xl px-4 py-2 font-medium shadow transition active:translate-y-px; }
-        .btn-primary { background: #358dff; color: white; }
-        .btn-primary:hover { background: #1e70f0; }
-        .btn-ghost { background: rgba(255,255,255,0.1); color: white; }
-        .btn-ghost:hover { background: rgba(255,255,255,0.15); }
-        .card { @apply rounded-2xl border backdrop-blur; background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); }
-        .input { @apply w-full rounded-xl border px-3 py-2 outline-none; background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.1); color: white; }
-        .input::placeholder { color: rgba(255,255,255,0.5); }
-        .coming-soon { 
-            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
-            color: #1f2937;
-            animation: glow 2s ease-in-out infinite alternate;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-        @keyframes glow {
-            from { box-shadow: 0 0 10px #fbbf2440; }
-            to { box-shadow: 0 0 20px #fbbf2460, 0 0 30px #fbbf2430; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        
+        .logo {
+            font-size: 32px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+        
+        .tagline {
+            color: #666;
+            font-size: 16px;
+        }
+        
+        .upload-area {
+            border: 3px dashed #ddd;
+            border-radius: 15px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 30px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .upload-area:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+        
+        .upload-area.dragover {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+        
+        .upload-icon {
+            font-size: 48px;
+            color: #ddd;
+            margin-bottom: 20px;
+        }
+        
+        .upload-text {
+            color: #666;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+        
+        .file-input {
+            display: none;
+        }
+        
+        .instrument-selector {
+            margin-bottom: 30px;
+        }
+        
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #333;
+        }
+        
+        .instrument-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+        }
+        
+        .instrument-option {
+            padding: 15px;
+            border: 2px solid #eee;
+            border-radius: 10px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: white;
+        }
+        
+        .instrument-option:hover {
+            border-color: #667eea;
+            transform: translateY(-2px);
+        }
+        
+        .instrument-option.selected {
+            border-color: #667eea;
+            background: #f0f4ff;
+            color: #667eea;
+        }
+        
+        .instrument-icon {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+        
+        .pricing-info {
+            background: #f8f9ff;
+            border: 1px solid #e0e7ff;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .price {
+            font-size: 24px;
+            font-weight: 700;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+        
+        .price-description {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .process-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 20px;
+        }
+        
+        .process-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+        
+        .process-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .progress {
+            display: none;
+            margin-bottom: 20px;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #eee;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+        
+        .progress-text {
+            text-align: center;
+            margin-top: 10px;
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .result {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            background: #f0f9ff;
+            border: 1px solid #e0f2fe;
+            border-radius: 10px;
+        }
+        
+        .download-btn {
+            padding: 12px 24px;
+            background: #10b981;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.3s ease;
+        }
+        
+        .download-btn:hover {
+            background: #059669;
+            transform: translateY(-1px);
+        }
+        
+        .file-info {
+            display: none;
+            background: #f8f9ff;
+            border: 1px solid #e0e7ff;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .file-name {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        
+        .file-details {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .error {
+            display: none;
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #dc2626;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
         }
     </style>
 </head>
 <body>
-    <div class="min-h-screen flex flex-col">
-        <header class="px-6 py-4">
-            <div class="mx-auto max-w-4xl flex items-center justify-between">
-                <div class="flex items-center gap-3">
-                    <span class="text-xl font-semibold tracking-tight">🎵 MuteOne</span>
-                </div>
-                <a class="btn btn-ghost" href="https://muteone.com">muteone.com</a>
-            </div>
-        </header>
+    <div class="container">
+        <div class="header">
+            <div class="logo">MuteOne™</div>
+            <div class="tagline">Remove one instrument, keep the rest</div>
+        </div>
         
-        <main class="flex-1 px-4 sm:px-6 pb-16">
-            <div class="mx-auto max-w-4xl">
-                <div class="min-h-[calc(100vh-200px)] flex items-center justify-center py-6">
-                    <div class="w-full max-w-sm sm:max-w-lg space-y-8">
-                        <div class="text-center space-y-2">
-                            <h1 class="text-3xl sm:text-4xl font-bold">MuteOne</h1>
-                            <p class="text-gray-400">
-                                Remove one instrument, keep the rest
-                            </p>
-                        </div>
-
-                        <div class="card p-6 space-y-6">
-                            <div class="space-y-4">
-                                <div>
-                                    <label class="text-sm font-medium text-gray-300 block mb-2">Audio File</label>
-                                    <input
-                                        class="input h-12 text-base w-full opacity-50 cursor-not-allowed"
-                                        type="file"
-                                        accept="audio/*,.mp3,.wav,.m4a,.flac,.ogg,.aac"
-                                        disabled
-                                    />
-                                </div>
-
-                                <div>
-                                    <label class="text-sm font-medium text-gray-300 block mb-2">Remove</label>
-                                    <select
-                                        class="input h-12 text-base w-full"
-                                        required
-                                    >
-                                        <option value="vocals">Vocals</option>
-                                        <option value="bass">Bass</option>
-                                        <option value="drums">Drums</option>
-                                        <option value="other">Other</option>
-                                    </select>
-                                </div>
-
-                                <button
-                                    class="coming-soon w-full h-12 text-base font-semibold mt-6 rounded-xl"
-                                >
-                                    Coming Soon
-                                </button>
-                            </div>
-                        </div>
-
-                        <div class="text-center text-xs text-gray-500 space-y-1">
-                            <p><strong>Desktop app launching soon</strong> • Windows & Mac • High-quality AI processing</p>
-                        </div>
-                    </div>
+        <div class="upload-area" id="uploadArea">
+            <div class="upload-icon">🎵</div>
+            <div class="upload-text">Drop your audio file here or click to browse</div>
+            <div style="font-size: 14px; color: #999; margin-top: 5px;">
+                Supports MP3, WAV, FLAC, M4A • Max 3:30 minutes • 50MB limit
+            </div>
+            <input type="file" class="file-input" id="fileInput" accept="audio/*">
+        </div>
+        
+        <div class="file-info" id="fileInfo">
+            <div class="file-name" id="fileName"></div>
+            <div class="file-details" id="fileDetails"></div>
+        </div>
+        
+        <div class="error" id="errorMessage"></div>
+        
+        <div class="instrument-selector">
+            <div class="section-title">Choose what to remove:</div>
+            <div class="instrument-grid">
+                <div class="instrument-option selected" data-instrument="vocals">
+                    <div class="instrument-icon">🎤</div>
+                    <div>Vocals</div>
+                </div>
+                <div class="instrument-option" data-instrument="drums">
+                    <div class="instrument-icon">🥁</div>
+                    <div>Drums</div>
+                </div>
+                <div class="instrument-option" data-instrument="bass">
+                    <div class="instrument-icon">🎸</div>
+                    <div>Bass</div>
+                </div>
+                <div class="instrument-option" data-instrument="other">
+                    <div class="instrument-icon">🎹</div>
+                    <div>Other</div>
                 </div>
             </div>
-        </main>
+        </div>
         
-        <footer class="px-6 py-8 text-center text-white/60 text-sm">
-            MuteOne™ © 2025
+        <div class="pricing-info">
+            <div class="price" style="color: #10b981;">FREE</div>
+            <div class="price-description">
+                Up to 3:30 minutes • 2 uploads per day • Full quality MP3
+            </div>
+        </div>
+        
+        <button class="process-btn" id="processBtn" disabled>
+            Upload a file to get started
+        </button>
+        
+        <div class="progress" id="progress">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-text" id="progressText">Processing your audio...</div>
+        </div>
+        
+        <div class="result" id="result">
+            <div style="margin-bottom: 15px;">
+                <div style="font-size: 18px; font-weight: 600; color: #10b981; margin-bottom: 5px;">
+                    ✅ Processing Complete!
+                </div>
+                <div style="color: #666; font-size: 14px;" id="resultDescription">
+                    Vocals removed successfully
+                </div>
+            </div>
+            <a href="#" class="download-btn" id="downloadBtn" download>
+                Download Result
+            </a>
+        </div>
+        
+        <footer style="text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; color: #666; font-size: 12px;">
+            <div style="margin-bottom: 5px;">© 2025 MuteOne™. All rights reserved.</div>
+            <div>MuteOne is a trademark of MuteOne Technologies.</div>
         </footer>
     </div>
+
+    <script>
+        // Global variables
+        let selectedFile = null;
+        let selectedInstrument = 'vocals';
+        
+        // DOM elements
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+        const fileDetails = document.getElementById('fileDetails');
+        const processBtn = document.getElementById('processBtn');
+        const progress = document.getElementById('progress');
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+        const result = document.getElementById('result');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const resultDescription = document.getElementById('resultDescription');
+        const errorMessage = document.getElementById('errorMessage');
+        
+        // File upload handling
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('dragover', handleDragOver);
+        uploadArea.addEventListener('dragleave', handleDragLeave);
+        uploadArea.addEventListener('drop', handleDrop);
+        fileInput.addEventListener('change', handleFileSelect);
+        
+        // Instrument selection
+        document.querySelectorAll('.instrument-option').forEach(option => {
+            option.addEventListener('click', () => {
+                document.querySelectorAll('.instrument-option').forEach(o => o.classList.remove('selected'));
+                option.classList.add('selected');
+                selectedInstrument = option.dataset.instrument;
+                updateProcessButton();
+            });
+        });
+        
+        // Process button
+        processBtn.addEventListener('click', processAudio);
+        
+        function handleDragOver(e) {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        }
+        
+        function handleDragLeave(e) {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+        }
+        
+        function handleDrop(e) {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        }
+        
+        function handleFileSelect(e) {
+            const files = e.target.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        }
+        
+        function handleFile(file) {
+            // Validate file type
+            const validTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/flac', 'audio/m4a', 'audio/ogg'];
+            if (!validTypes.some(type => file.type === type || file.name.toLowerCase().endsWith(type.split('/')[1]))) {
+                showError('Please upload a valid audio file (MP3, WAV, FLAC, M4A)');
+                return;
+            }
+            
+            // Check file size (max 50MB)
+            if (file.size > 50 * 1024 * 1024) {
+                showError('File too large. Maximum size is 50MB');
+                return;
+            }
+            
+            // Estimate duration (rough approximation: 1MB ≈ 1 minute for MP3)
+            const estimatedDuration = file.size / (1024 * 1024) * 60; // seconds
+            if (estimatedDuration > 210) { // 3:30 limit
+                showError('File appears to be longer than 3:30. Please upload a shorter track.');
+                return;
+            }
+            
+            selectedFile = file;
+            
+            // Show file info
+            fileName.textContent = file.name;
+            const durationText = estimatedDuration > 60 ? 
+                `~${Math.floor(estimatedDuration/60)}:${Math.floor(estimatedDuration%60).toString().padStart(2,'0')}` : 
+                `~${Math.floor(estimatedDuration)}s`;
+            fileDetails.textContent = `${(file.size / 1024 / 1024).toFixed(1)}MB • ${durationText} • ${file.type || 'Audio file'}`;
+            fileInfo.style.display = 'block';
+            hideError();
+            
+            updateProcessButton();
+        }
+        
+        function updateProcessButton() {
+            if (selectedFile && selectedInstrument) {
+                processBtn.disabled = false;
+                processBtn.textContent = `Remove ${selectedInstrument} - FREE`;
+            } else {
+                processBtn.disabled = true;
+                processBtn.textContent = 'Upload a file to get started';
+            }
+        }
+        
+        async function processAudio() {
+            if (!selectedFile) return;
+            
+            // Hide previous results and errors
+            result.style.display = 'none';
+            hideError();
+            
+            // Show progress
+            progress.style.display = 'block';
+            processBtn.disabled = true;
+            processBtn.textContent = 'Processing...';
+            
+            // Simulate progress (since LALAL.AI doesn't provide real-time progress)
+            simulateProgress();
+            
+            try {
+                // Create form data for LALAL.AI API
+                const formData = new FormData();
+                formData.append('file', selectedFile);
+                formData.append('stem', selectedInstrument);
+                
+                // Call your backend API (which will call LALAL.AI)
+                const response = await fetch('/api/separate', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const blob = await response.blob();
+                
+                // Create download URL
+                const downloadUrl = URL.createObjectURL(blob);
+                downloadBtn.href = downloadUrl;
+                downloadBtn.download = `${selectedFile.name.replace(/\.[^/.]+$/, '')}_no_${selectedInstrument}.${getFileExtension(selectedFile.name)}`;
+                
+                // Show success
+                progressFill.style.width = '100%';
+                progressText.textContent = 'Complete!';
+                
+                setTimeout(() => {
+                    progress.style.display = 'none';
+                    result.style.display = 'block';
+                    resultDescription.textContent = `${selectedInstrument} removed successfully`;
+                    processBtn.disabled = false;
+                    updateProcessButton();
+                }, 1000);
+                
+            } catch (error) {
+                console.error('Processing error:', error);
+                progress.style.display = 'none';
+                processBtn.disabled = false;
+                updateProcessButton();
+                showError('Processing failed. Please try again or contact support.');
+            }
+        }
+        
+        function simulateProgress() {
+            let progress = 0;
+            const interval = setInterval(() => {
+                progress += Math.random() * 15;
+                if (progress > 90) {
+                    progress = 90;
+                    clearInterval(interval);
+                }
+                progressFill.style.width = progress + '%';
+                
+                if (progress < 30) {
+                    progressText.textContent = 'Uploading your file...';
+                } else if (progress < 60) {
+                    progressText.textContent = 'AI is separating audio sources...';
+                } else {
+                    progressText.textContent = 'Almost done, preparing download...';
+                }
+            }, 800);
+        }
+        
+        function getFileExtension(filename) {
+            return filename.split('.').pop().toLowerCase();
+        }
+        
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+        }
+        
+        function hideError() {
+            errorMessage.style.display = 'none';
+        }
+        
+        // Initialize
+        updateProcessButton();
+    </script>
 </body>
 </html>
