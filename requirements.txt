@@ -1,0 +1,9 @@
+Flask==2.3.3
+demucs==4.0.1
+torch==2.1.0
+torchaudio==2.1.0
+numpy==1.24.3
+soundfile==0.12.1
+librosa==0.10.1
+Werkzeug==2.3.7
+gunicorn==21.2.0
