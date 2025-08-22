@@ -172,10 +172,10 @@ export default async function handler(req, res) {
 
     // Check duration limit
     const estimatedDuration = estimateDuration(fileData);
-    if (estimatedDuration > 210) {
+    if (estimatedDuration > 300) { // 5:00 limit
       return res.status(400).json({ 
         error: 'Track too long',
-        message: 'Maximum track length is 3:30 minutes'
+        message: 'Maximum track length is 5 minutes'
       });
     }
 
