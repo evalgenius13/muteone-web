@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MuteOne</title>
+    <meta name="description" content="Remove one instrument, keep the rest">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: { 500: '#358dff', 600: '#1e70f0' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background: rgb(2 6 23); color: rgb(241 245 249); }
+        .btn { @apply inline-flex items-center justify-center rounded-xl px-4 py-2 font-medium shadow transition active:translate-y-px; }
+        .btn-primary { background: #358dff; color: white; }
+        .btn-primary:hover { background: #1e70f0; }
+        .btn-ghost { background: rgba(255,255,255,0.1); color: white; }
+        .btn-ghost:hover { background: rgba(255,255,255,0.15); }
+        .card { @apply rounded-2xl border backdrop-blur; background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); }
+        .input { @apply w-full rounded-xl border px-3 py-2 outline-none; background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.1); color: white; }
+        .input::placeholder { color: rgba(255,255,255,0.5); }
+        .coming-soon { 
+            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+            color: #1f2937;
+            animation: glow 2s ease-in-out infinite alternate;
+        }
+        @keyframes glow {
+            from { box-shadow: 0 0 10px #fbbf2440; }
+            to { box-shadow: 0 0 20px #fbbf2460, 0 0 30px #fbbf2430; }
+        }
+    </style>
+</head>
+<body>
+    <div class="min-h-screen flex flex-col">
+        <header class="px-6 py-4">
+            <div class="mx-auto max-w-4xl flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <span class="text-xl font-semibold tracking-tight">🎵 MuteOne</span>
+                </div>
+                <a class="btn btn-ghost" href="https://muteone.com">muteone.com</a>
+            </div>
+        </header>
+        
+        <main class="flex-1 px-4 sm:px-6 pb-16">
+            <div class="mx-auto max-w-4xl">
+                <div class="min-h-[calc(100vh-200px)] flex items-center justify-center py-6">
+                    <div class="w-full max-w-sm sm:max-w-lg space-y-8">
+                        <div class="text-center space-y-2">
+                            <h1 class="text-3xl sm:text-4xl font-bold">MuteOne</h1>
+                            <p class="text-gray-400">
+                                Remove one instrument, keep the rest
+                            </p>
+                        </div>
+
+                        <div class="card p-6 space-y-6">
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="text-sm font-medium text-gray-300 block mb-2">Audio File</label>
+                                    <input
+                                        class="input h-12 text-base w-full"
+                                        type="file"
+                                        accept="audio/*,.mp3,.wav,.m4a,.flac,.ogg,.aac"
+                                        required
+                                    />
+                                </div>
+
+                                <div>
+                                    <label class="text-sm font-medium text-gray-300 block mb-2">Remove</label>
+                                    <select
+                                        class="input h-12 text-base w-full"
+                                        required
+                                    >
+                                        <option value="vocals">Vocals</option>
+                                        <option value="bass">Bass</option>
+                                        <option value="drums">Drums</option>
+                                        <option value="other">Other</option>
+                                    </select>
+                                </div>
+
+                                <button
+                                    class="coming-soon w-full h-12 text-base font-semibold mt-6 rounded-xl"
+                                >
+                                    Coming Soon
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="text-center text-xs text-gray-500 space-y-1">
+                            <p><strong>Desktop app launching soon</strong> • Windows & Mac • High-quality AI processing</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+        
+        <footer class="px-6 py-8 text-center text-white/60 text-sm">
+            MuteOne™ © 2025
+        </footer>
+    </div>
+</body>
+</html>
