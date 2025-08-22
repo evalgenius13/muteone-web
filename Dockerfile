@@ -45,9 +45,9 @@ RUN chmod -R 777 /tmp/
 # Expose port
 EXPOSE 5000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:5000/ || exit 1
+# Health check: use the platform $PORT and a cheap /health path
+HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
+  CMD sh -c 'curl -fsS "http://127.0.0.1:${PORT:-5000}/health" || exit 1'
 
-# Start the application with gunicorn (production server) - FIXED PORT ISSUE
-CMD gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 600 app:app
+# Start the application with gunicorn (production server) - FIXED PORT + REDUCED THREADS
+CMD gunicorn --bind 0.0.0.0:${PORT:-5000} --workers 1 --threads 1 --timeout 600 app:app
