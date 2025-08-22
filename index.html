@@ -270,7 +270,7 @@
             <div class="upload-icon">🎵</div>
             <div class="upload-text">Drop your audio file here or click to browse</div>
             <div style="font-size: 14px; color: #999; margin-top: 5px;">
-                Supports MP3, WAV, FLAC, M4A • Max 3:30 minutes • 50MB limit
+                Supports MP3, WAV, FLAC, M4A • Max 5 minutes • 50MB limit
             </div>
             <input type="file" class="file-input" id="fileInput" accept="audio/*">
         </div>
@@ -307,7 +307,7 @@
         <div class="pricing-info">
             <div class="price" style="color: #10b981;">FREE</div>
             <div class="price-description">
-                Up to 3:30 minutes • 2 uploads per day • Full quality MP3
+                Up to 5 minutes • 2 uploads per day • Full quality MP3
             </div>
         </div>
         
@@ -424,8 +424,8 @@
             
             // Estimate duration (rough approximation: 1MB ≈ 1 minute for MP3)
             const estimatedDuration = file.size / (1024 * 1024) * 60; // seconds
-            if (estimatedDuration > 210) { // 3:30 limit
-                showError('File appears to be longer than 3:30. Please upload a shorter track.');
+            if (estimatedDuration > 300) { // 5:00 limit
+                showError('File appears to be longer than 5:00. Please upload a shorter track.');
                 return;
             }
             
