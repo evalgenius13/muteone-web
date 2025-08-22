@@ -9,13 +9,14 @@ from werkzeug.utils import secure_filename
 import threading
 import time
 import shutil
+import io
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB limit for Railway $20 tier
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB limit
 
 # Store processing jobs in memory
 processing_jobs = {}
@@ -53,18 +54,27 @@ def process_audio():
         # Generate unique job ID
         job_id = str(uuid.uuid4())
         
+        # Read the entire file into memory immediately
+        file.seek(0)  # Reset to beginning
+        file_content = file.read()
+        original_filename = secure_filename(file.filename)
+        
+        logger.info(f'Read file {original_filename}: {len(file_content)} bytes')
+        
         # Initialize job status
         processing_jobs[job_id] = {
             'status': 'starting',
             'message': f'Starting processing - removing {remove}...',
             'result_path': None,
-            'progress': 0
+            'progress': 0,
+            'original_name': Path(original_filename).stem,
+            'remove_type': remove
         }
         
-        # Start processing in background
+        # Start processing in background with file content
         thread = threading.Thread(
             target=process_audio_background,
-            args=(file, remove, job_id),
+            args=(file_content, original_filename, remove, job_id),
             daemon=True
         )
         thread.start()
@@ -76,8 +86,8 @@ def process_audio():
         })
         
     except Exception as e:
-        logger.error(f'Process error: {str(e)}')
-        return jsonify({'error': 'Processing failed. Please try again.'}), 500
+        logger.error(f'Process error: {str(e)}', exc_info=True)
+        return jsonify({'error': f'Processing failed: {str(e)}'}), 500
 
 @app.route('/api/status/<job_id>')
 def check_status(job_id):
@@ -126,11 +136,11 @@ def download_result(job_id):
             return jsonify({'error': 'File not found'}), 404
             
     except Exception as e:
-        logger.error(f'Download error: {str(e)}')
+        logger.error(f'Download error: {str(e)}', exc_info=True)
         return jsonify({'error': 'Download failed'}), 500
 
-def process_audio_background(file, remove_stem, job_id):
-    """Background processing function with proper error handling"""
+def process_audio_background(file_content, original_filename, remove_stem, job_id):
+    """Background processing function with proper file handling"""
     temp_dir = None
     try:
         # Create temporary directory
@@ -144,16 +154,20 @@ def process_audio_background(file, remove_stem, job_id):
             'progress': 10
         })
         
-        # Save uploaded file
-        original_filename = secure_filename(file.filename)
+        # Write file content to disk
         input_path = os.path.join(temp_dir, f'input_{original_filename}')
-        file.save(input_path)
+        with open(input_path, 'wb') as f:
+            f.write(file_content)
         
-        # Store original info
-        processing_jobs[job_id]['original_name'] = Path(original_filename).stem
-        processing_jobs[job_id]['remove_type'] = remove_stem
+        logger.info(f'Saved input file: {input_path} ({len(file_content)} bytes)')
         
-        logger.info(f'Saved input file: {input_path} ({os.path.getsize(input_path)} bytes)')
+        # Verify file was written correctly
+        if not os.path.exists(input_path):
+            raise Exception("Failed to save input file")
+        
+        file_size = os.path.getsize(input_path)
+        if file_size != len(file_content):
+            raise Exception(f"File size mismatch: expected {len(file_content)}, got {file_size}")
         
         # Update status
         processing_jobs[job_id].update({
@@ -189,7 +203,7 @@ def process_audio_background(file, remove_stem, job_id):
         logger.info(f'Processing completed successfully for job {job_id}')
         
     except Exception as e:
-        logger.error(f'Background processing error for job {job_id}: {str(e)}')
+        logger.error(f'Background processing error for job {job_id}: {str(e)}', exc_info=True)
         processing_jobs[job_id].update({
             'status': 'failed',
             'message': f'Processing failed: {str(e)}',
@@ -234,11 +248,16 @@ def run_demucs_separation(input_path, output_dir, job_id):
             'progress': 50
         })
         
-        # Run the command
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)  # 10-minute timeout
+        # Run the command with environment variables
+        env = os.environ.copy()
+        env['TORCH_HOME'] = '/tmp/torch'
+        env['HF_HOME'] = '/tmp/huggingface'
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600, env=env)
         
         if result.returncode != 0:
             logger.error(f'Demucs stderr: {result.stderr}')
+            logger.error(f'Demucs stdout: {result.stdout}')
             raise Exception(f"Demucs separation failed: {result.stderr}")
         
         logger.info('Demucs separation completed successfully')
@@ -321,7 +340,7 @@ def create_final_mix(output_dir, remove_stem, temp_dir, input_path, job_id):
             'progress': 90
         })
         
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)  # 2-minute timeout
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         
         if result.returncode != 0:
             logger.error(f'FFmpeg stderr: {result.stderr}')
