@@ -49,5 +49,5 @@ EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=30s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:5000/ || exit 1
 
-# Start the application with gunicorn (production server)
+# Start the application with gunicorn (production server) - FIXED PORT ISSUE
 CMD gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 600 app:app
