@@ -1,5 +1,5 @@
 // pages/api/separate.js
-// Next.js API route — LALAL.AI upload → split → poll → return ONE file (5:00 cap)
+// Next.js API route — LALAL.AI upload → split → poll → return ONE file (no length/size limits)
 
 import formidable from "formidable";
 import fetch from "node-fetch";
@@ -78,7 +78,6 @@ export default async function handler(req, res) {
     const { fields, files } = await new Promise((resolve, reject) => {
       const form = formidable({
         multiples: false,
-        maxFileSize: 60 * 1024 * 1024, // 60MB
         keepExtensions: true,
       });
       form.parse(req, (err, fields, files) => (err ? reject(err) : resolve({ fields, files })));
@@ -112,16 +111,6 @@ export default async function handler(req, res) {
 
     const uploadJson = await uploadResp.json();
     const uploadId = uploadJson.id;
-    const durationSec = Math.round(uploadJson.duration || 0);
-
-    // Enforce 5:00 cap
-    if (durationSec > 300) {
-      return res.status(400).json({
-        error: "Track too long",
-        message: "Maximum track length is 5:00.",
-        duration_sec: durationSec,
-      });
-    }
 
     // --- Step 2: Request split (one stem only) ---
     const params = JSON.stringify([{ id: uploadId, stem }]);
@@ -188,7 +177,6 @@ export default async function handler(req, res) {
       ok: true,
       id: uploadId,
       stem_removed: stem,
-      duration_sec: durationSec,
       file_url: result.back_track, // only the final file
       message: `${stem} removed successfully`,
     });
