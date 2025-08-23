@@ -346,8 +346,7 @@
         </div>
         
         <footer style="text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; color: #666; font-size: 12px;">
-            <div style="margin-bottom: 5px;">© 2025 MuteOne™. All rights reserved.</div>
-            <div>MuteOne is a trademark of MuteOne Technologies.</div>
+            <div>© 2025 MuteOne™. All rights reserved.</div>
         </footer>
     </div>
 
@@ -465,7 +464,8 @@
             
             try {
                 // Step 1: Get upload authorization
-                progressText.textContent = 'Preparing upload...';
+                progressText.textContent = 'Preparing upload... (10 seconds)';
+                progressFill.style.width = '5%';
                 
                 const authResponse = await fetch('/api/separate', {
                     method: 'POST',
@@ -481,14 +481,22 @@
                 
                 if (!authResponse.ok) {
                     const errorData = await authResponse.json();
-                    throw new Error(errorData.message || `HTTP error! status: ${authResponse.status}`);
+                    
+                    // Better error messages based on status
+                    if (authResponse.status === 429) {
+                        throw new Error(errorData.message || "You've reached your daily limit of 2 uploads. Please try again tomorrow.");
+                    } else if (authResponse.status === 500) {
+                        throw new Error("Our servers are temporarily unavailable. Please try again in a few minutes.");
+                    } else {
+                        throw new Error(errorData.message || "Upload preparation failed. Please try again.");
+                    }
                 }
                 
                 const authData = await authResponse.json();
-                progressFill.style.width = '10%';
+                progressFill.style.width = '15%';
                 
                 // Step 2: Upload directly to LALAL.AI
-                progressText.textContent = 'Uploading your file...';
+                progressText.textContent = 'Uploading your file... (30 seconds)';
                 
                 const uploadResponse = await fetch('https://www.lalal.ai/api/upload/', {
                     method: 'POST',
@@ -500,12 +508,18 @@
                 });
                 
                 if (!uploadResponse.ok) {
-                    throw new Error('Upload to processing service failed');
+                    if (uploadResponse.status === 413) {
+                        throw new Error("File is too large for processing. Try a shorter audio clip or smaller file size.");
+                    } else if (uploadResponse.status === 415) {
+                        throw new Error("This file format isn't supported. Please try MP3, WAV, FLAC, or M4A files.");
+                    } else {
+                        throw new Error("Upload failed - your file may be corrupted or unsupported. Please try a different audio file.");
+                    }
                 }
                 
                 const uploadResult = await uploadResponse.json();
-                progressFill.style.width = '40%';
-                progressText.textContent = 'Upload complete, processing...';
+                progressFill.style.width = '30%';
+                progressText.textContent = 'Upload complete! Starting AI separation... (2-3 minutes)';
                 
                 // Step 3: Process the uploaded file
                 const processResponse = await fetch('/api/separate', {
@@ -522,7 +536,15 @@
                 
                 if (!processResponse.ok) {
                     const errorData = await processResponse.json();
-                    throw new Error(errorData.message || `Processing failed! status: ${processResponse.status}`);
+                    
+                    // Better error messages based on response
+                    if (processResponse.status === 502) {
+                        throw new Error("AI processing failed - this audio file may be too complex or corrupted. Try a different song.");
+                    } else if (processResponse.status === 504) {
+                        throw new Error("Processing is taking longer than usual. The audio servers may be busy - please try again in a few minutes.");
+                    } else {
+                        throw new Error(errorData.message || "Audio separation failed. Please try again with a different file.");
+                    }
                 }
                 
                 const processResult = await processResponse.json();
@@ -537,9 +559,11 @@
                         result.style.display = 'block';
                         resultDescription.textContent = `${selectedInstrument === 'voice' ? 'Vocals' : selectedInstrument} removed successfully`;
                         
-                        // Set download link 
+                        // Set download link with clean filename
+                        const cleanFileName = selectedFile.name.replace(/\.[^/.]+$/, ''); // Remove extension
+                        const instrumentName = selectedInstrument === 'voice' ? 'vocals' : selectedInstrument;
                         downloadBtn.href = processResult.back_track_url;
-                        downloadBtn.download = `${selectedFile.name.replace(/\.[^/.]+$/, '')}_no_${selectedInstrument}.${getFileExtension(selectedFile.name)}`;
+                        downloadBtn.download = `${cleanFileName}_no_${instrumentName}_muteone.${getFileExtension(selectedFile.name)}`;
                         
                         processBtn.disabled = false;
                         updateProcessButton();
