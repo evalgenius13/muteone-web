@@ -525,9 +525,9 @@
                     throw new Error(errorData.message || `Processing failed! status: ${processResponse.status}`);
                 }
                 
-                const result = await processResponse.json();
+                const processResult = await processResponse.json();
                 
-                if (result.ok) {
+                if (processResult.ok) {
                     // Show success and provide download link
                     progressFill.style.width = '100%';
                     progressText.textContent = 'Complete!';
@@ -538,7 +538,7 @@
                         resultDescription.textContent = `${selectedInstrument === 'voice' ? 'Vocals' : selectedInstrument} removed successfully`;
                         
                         // Set download link 
-                        downloadBtn.href = result.back_track_url;
+                        downloadBtn.href = processResult.back_track_url;
                         downloadBtn.download = `${selectedFile.name.replace(/\.[^/.]+$/, '')}_no_${selectedInstrument}.${getFileExtension(selectedFile.name)}`;
                         
                         processBtn.disabled = false;
