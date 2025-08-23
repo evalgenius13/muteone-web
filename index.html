@@ -141,7 +141,7 @@
         .price {
             font-size: 24px;
             font-weight: 700;
-            color: #667eea;
+            color: #10b981;
             margin-bottom: 5px;
         }
         
@@ -314,7 +314,7 @@
         </div>
         
         <div class="pricing-info">
-            <div class="price" style="color: #10b981;">FREE</div>
+            <div class="price">FREE</div>
             <div class="price-description">
                 High quality audio • 2 uploads per day
             </div>
@@ -419,9 +419,9 @@
         
         function handleFile(file) {
             // Basic file type validation - allow all audio files
-            const fileName = file.name.toLowerCase();
+            const fileNameLower = file.name.toLowerCase();
             const audioExtensions = ['.mp3', '.wav', '.flac', '.m4a', '.aac', '.ogg', '.wma', '.aiff', '.mp4', '.m4v'];
-            const isAudioFile = audioExtensions.some(ext => fileName.endsWith(ext));
+            const isAudioFile = audioExtensions.some(ext => fileNameLower.endsWith(ext));
             
             if (!isAudioFile) {
                 showError('Please upload an audio file');
@@ -442,7 +442,7 @@
         function updateProcessButton() {
             if (selectedFile && selectedInstrument) {
                 processBtn.disabled = false;
-                processBtn.textContent = `Remove ${selectedInstrument} - FREE`;
+                processBtn.textContent = `Remove ${selectedInstrument === 'voice' ? 'vocals' : selectedInstrument} - FREE`;
             } else {
                 processBtn.disabled = true;
                 processBtn.textContent = 'Upload a file to get started';
@@ -460,44 +460,93 @@
             progress.style.display = 'block';
             processBtn.disabled = true;
             processBtn.textContent = 'Processing...';
-            
-            // Simulate progress (since LALAL.AI doesn't provide real-time progress)
-            simulateProgress();
+            progressFill.style.width = '0%';
+            progressText.textContent = 'Starting upload...';
             
             try {
-                // Create form data for LALAL.AI API
-                const formData = new FormData();
-                formData.append('file', selectedFile);
-                formData.append('stem', selectedInstrument);
+                // Step 1: Get upload authorization
+                progressText.textContent = 'Preparing upload...';
                 
-                // Call your backend API (which will call LALAL.AI)
-                const response = await fetch('/api/separate', {
+                const authResponse = await fetch('/api/separate', {
                     method: 'POST',
-                    body: formData
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        action: 'upload',
+                        filename: selectedFile.name,
+                        stem: selectedInstrument
+                    })
                 });
                 
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                if (!authResponse.ok) {
+                    const errorData = await authResponse.json();
+                    throw new Error(errorData.message || `HTTP error! status: ${authResponse.status}`);
                 }
                 
-                const blob = await response.blob();
+                const authData = await authResponse.json();
+                progressFill.style.width = '10%';
                 
-                // Create download URL
-                const downloadUrl = URL.createObjectURL(blob);
-                downloadBtn.href = downloadUrl;
-                downloadBtn.download = `${selectedFile.name.replace(/\.[^/.]+$/, '')}_no_${selectedInstrument}.${getFileExtension(selectedFile.name)}`;
+                // Step 2: Upload directly to LALAL.AI
+                progressText.textContent = 'Uploading your file...';
                 
-                // Show success
-                progressFill.style.width = '100%';
-                progressText.textContent = 'Complete!';
+                const uploadResponse = await fetch('https://www.lalal.ai/api/upload/', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': authData.auth_header,
+                        'Content-Disposition': `attachment; filename="${selectedFile.name}"`
+                    },
+                    body: selectedFile
+                });
                 
-                setTimeout(() => {
-                    progress.style.display = 'none';
-                    result.style.display = 'block';
-                    resultDescription.textContent = `${selectedInstrument} removed successfully`;
-                    processBtn.disabled = false;
-                    updateProcessButton();
-                }, 1000);
+                if (!uploadResponse.ok) {
+                    throw new Error('Upload to processing service failed');
+                }
+                
+                const uploadResult = await uploadResponse.json();
+                progressFill.style.width = '40%';
+                progressText.textContent = 'Upload complete, processing...';
+                
+                // Step 3: Process the uploaded file
+                const processResponse = await fetch('/api/separate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        action: 'process',
+                        uploadId: uploadResult.id,
+                        stem: selectedInstrument
+                    })
+                });
+                
+                if (!processResponse.ok) {
+                    const errorData = await processResponse.json();
+                    throw new Error(errorData.message || `Processing failed! status: ${processResponse.status}`);
+                }
+                
+                const result = await processResponse.json();
+                
+                if (result.ok) {
+                    // Show success and provide download link
+                    progressFill.style.width = '100%';
+                    progressText.textContent = 'Complete!';
+                    
+                    setTimeout(() => {
+                        progress.style.display = 'none';
+                        result.style.display = 'block';
+                        resultDescription.textContent = `${selectedInstrument === 'voice' ? 'Vocals' : selectedInstrument} removed successfully`;
+                        
+                        // Set download link 
+                        downloadBtn.href = result.back_track_url;
+                        downloadBtn.download = `${selectedFile.name.replace(/\.[^/.]+$/, '')}_no_${selectedInstrument}.${getFileExtension(selectedFile.name)}`;
+                        
+                        processBtn.disabled = false;
+                        updateProcessButton();
+                    }, 1000);
+                } else {
+                    throw new Error('Processing failed');
+                }
                 
             } catch (error) {
                 console.error('Processing error:', error);
@@ -506,26 +555,6 @@
                 updateProcessButton();
                 showError('Processing failed. Please try again or contact support.');
             }
-        }
-        
-        function simulateProgress() {
-            let progress = 0;
-            const interval = setInterval(() => {
-                progress += Math.random() * 15;
-                if (progress > 90) {
-                    progress = 90;
-                    clearInterval(interval);
-                }
-                progressFill.style.width = progress + '%';
-                
-                if (progress < 30) {
-                    progressText.textContent = 'Uploading your file...';
-                } else if (progress < 60) {
-                    progressText.textContent = 'AI is separating audio sources...';
-                } else {
-                    progressText.textContent = 'Almost done, preparing download...';
-                }
-            }, 800);
         }
         
         function getFileExtension(filename) {
