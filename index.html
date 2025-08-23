@@ -332,17 +332,32 @@
         </div>
         
         <div class="result" id="result">
-            <div style="margin-bottom: 15px;">
-                <div style="font-size: 18px; font-weight: 600; color: #10b981; margin-bottom: 5px;">
-                    ✅ Processing Complete!
+            <div style="margin-bottom: 20px;">
+                <div style="font-size: 20px; font-weight: 600; color: #10b981; margin-bottom: 8px;">
+                    🎉 Success!
                 </div>
-                <div style="color: #666; font-size: 14px;" id="resultDescription">
+                <div style="color: #666; font-size: 15px; margin-bottom: 15px;" id="resultDescription">
                     Vocals removed successfully
                 </div>
+                <div style="background: #f0f9ff; border: 1px solid #e0f2fe; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+                    <div style="font-size: 14px; color: #0369a1; font-weight: 600; margin-bottom: 8px;">
+                        ✨ What we did:
+                    </div>
+                    <div style="font-size: 13px; color: #075985;" id="processingInfo">
+                        Used professional AI to isolate and remove vocals while preserving all other instruments in high quality.
+                    </div>
+                </div>
             </div>
-            <a href="#" class="download-btn" id="downloadBtn" download>
-                Download Result
-            </a>
+            <div style="text-align: center;">
+                <a href="#" class="download-btn" id="downloadBtn" download>
+                    ⬇️ Download Your Result
+                </a>
+                <div style="margin-top: 12px;">
+                    <button onclick="location.reload()" style="background: none; border: 1px solid #ddd; padding: 8px 16px; border-radius: 6px; color: #666; cursor: pointer; font-size: 13px;">
+                        Process Another File
+                    </button>
+                </div>
+            </div>
         </div>
         
         <footer style="text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; color: #666; font-size: 12px;">
@@ -417,21 +432,51 @@
         }
         
         function handleFile(file) {
-            // Basic file type validation - allow all audio files
+            // Enhanced file type validation with helpful messages
             const fileNameLower = file.name.toLowerCase();
-            const audioExtensions = ['.mp3', '.wav', '.flac', '.m4a', '.aac', '.ogg', '.wma', '.aiff', '.mp4', '.m4v'];
-            const isAudioFile = audioExtensions.some(ext => fileNameLower.endsWith(ext));
+            const audioExtensions = ['.mp3', '.wav', '.flac', '.m4a', '.aac', '.ogg', '.wma', '.aiff'];
+            const videoExtensions = ['.mp4', '.m4v', '.mov', '.avi'];
+            const supportedExtensions = [...audioExtensions, ...videoExtensions];
             
-            if (!isAudioFile) {
-                showError('Please upload an audio file');
+            const isSupported = supportedExtensions.some(ext => fileNameLower.endsWith(ext));
+            
+            if (!isSupported) {
+                showError('This file format isn\'t supported. Please upload MP3, WAV, FLAC, M4A, or MP4 files.');
                 return;
+            }
+            
+            // Check if file seems corrupted (0 bytes or suspiciously small)
+            if (file.size === 0) {
+                showError('This file appears to be empty or corrupted. Please try a different audio file.');
+                return;
+            }
+            
+            if (file.size < 10000) { // Less than 10KB is suspicious for audio
+                showError('This file is too small to be a valid audio file. Please try a different file.');
+                return;
+            }
+            
+            // Warn about very large files (over 100MB)
+            if (file.size > 100 * 1024 * 1024) {
+                showError('This file is very large and may take longer to process. For best results, try a file under 100MB.');
+                // Don't return - still allow processing
             }
             
             selectedFile = file;
             
-            // Show file info
+            // Show file info with validation feedback
             fileName.textContent = file.name;
-            fileDetails.textContent = `${(file.size / 1024 / 1024).toFixed(1)}MB • ${file.type || 'Audio file'}`;
+            const sizeText = `${(file.size / 1024 / 1024).toFixed(1)}MB`;
+            const typeText = file.type || 'Audio file';
+            
+            // Add helpful format info
+            let formatInfo = '';
+            if (fileNameLower.endsWith('.mp3')) formatInfo = ' • High compatibility';
+            else if (fileNameLower.endsWith('.wav')) formatInfo = ' • Best quality';
+            else if (fileNameLower.endsWith('.flac')) formatInfo = ' • Lossless quality';
+            else if (fileNameLower.endsWith('.m4a')) formatInfo = ' • Good quality';
+            
+            fileDetails.textContent = `${sizeText} • ${typeText}${formatInfo}`;
             fileInfo.style.display = 'block';
             hideError();
             
@@ -551,25 +596,44 @@
                 
                 if (processResult.ok) {
                     // Show success and provide download link
-                    progressFill.style.width = '100%';
-                    progressText.textContent = 'Complete!';
+                    progressFill.style.width = '90%';
+                    progressText.textContent = 'Almost done, preparing your download... (5 seconds)';
+                    
+                    setTimeout(() => {
+                        progressFill.style.width = '100%';
+                        progressText.textContent = 'Complete! 🎉';
+                    }, 1000);
                     
                     setTimeout(() => {
                         progress.style.display = 'none';
                         result.style.display = 'block';
-                        resultDescription.textContent = `${selectedInstrument === 'voice' ? 'Vocals' : selectedInstrument} removed successfully`;
+                        
+                        // Update success message based on what was removed
+                        const instrumentName = selectedInstrument === 'voice' ? 'vocals' : selectedInstrument;
+                        resultDescription.textContent = `${instrumentName.charAt(0).toUpperCase() + instrumentName.slice(1)} removed successfully`;
+                        
+                        // Update processing info based on instrument
+                        const processingInfo = document.getElementById('processingInfo');
+                        if (selectedInstrument === 'voice') {
+                            processingInfo.textContent = 'Used professional AI to isolate and remove vocals while preserving all other instruments in high quality. Perfect for karaoke or instrumental versions.';
+                        } else if (selectedInstrument === 'drum') {
+                            processingInfo.textContent = 'Used professional AI to isolate and remove drums while preserving vocals and other instruments in high quality.';
+                        } else if (selectedInstrument === 'bass') {
+                            processingInfo.textContent = 'Used professional AI to isolate and remove bass while preserving vocals and other instruments in high quality.';
+                        } else {
+                            processingInfo.textContent = `Used professional AI to isolate and remove ${instrumentName} while preserving all other instruments in high quality.`;
+                        }
                         
                         // Set download link with clean filename
                         const cleanFileName = selectedFile.name.replace(/\.[^/.]+$/, ''); // Remove extension
-                        const instrumentName = selectedInstrument === 'voice' ? 'vocals' : selectedInstrument;
                         downloadBtn.href = processResult.back_track_url;
                         downloadBtn.download = `${cleanFileName}_no_${instrumentName}_muteone.${getFileExtension(selectedFile.name)}`;
                         
                         processBtn.disabled = false;
                         updateProcessButton();
-                    }, 1000);
+                    }, 2500);
                 } else {
-                    throw new Error('Processing failed');
+                    throw new Error('Audio separation failed - please try again with a different file.');
                 }
                 
             } catch (error) {
@@ -577,7 +641,9 @@
                 progress.style.display = 'none';
                 processBtn.disabled = false;
                 updateProcessButton();
-                showError('Processing failed. Please try again or contact support.');
+                
+                // Show user-friendly error message
+                showError(error.message);
             }
         }
         
