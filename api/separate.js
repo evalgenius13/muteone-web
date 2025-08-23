@@ -1,4 +1,4 @@
-// pages/api/separate.js - Direct Upload Approach
+// api/separate.js - Direct Upload Architecture
 import fetch from "node-fetch";
 
 export const config = { api: { bodyParser: true } };
@@ -40,7 +40,7 @@ function decrementRateLimit(ip) {
   }
 }
 
-// Allowed stems (LALAL.AI official names)
+// LALAL.AI supported stems
 const ALLOWED_STEMS = new Set([
   "voice",
   "drum", 
@@ -54,7 +54,7 @@ const ALLOWED_STEMS = new Set([
 ]);
 
 export default async function handler(req, res) {
-  // CORS
+  // CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
@@ -77,7 +77,7 @@ export default async function handler(req, res) {
   try {
     const { action, filename, stem, uploadId } = req.body;
 
-    // Validate stem for both actions
+    // Validate stem
     if (!ALLOWED_STEMS.has(stem)) {
       return res.status(400).json({
         error: "Invalid stem",
@@ -86,17 +86,19 @@ export default async function handler(req, res) {
     }
 
     if (action === 'upload') {
-      // Step 1: Prepare for upload - just return auth header
-      if (!checkRateLimit(ip)) {
-        return res.status(429).json({
-          error: "Daily limit exceeded",
-          message: "You have reached your daily limit of 2 uploads. Try again tomorrow!",
-        });
-      }
+      // Step 1: Provide upload authorization (rate limiting commented out for testing)
+      // if (!checkRateLimit(ip)) {
+      //   return res.status(429).json({
+      //     error: "Daily limit exceeded",
+      //     message: "You have reached your daily limit of 2 uploads. Try again tomorrow!",
+      //   });
+      // }
+
+      console.log(`${ip} requesting upload auth for ${filename} - ${stem}`);
 
       return res.status(200).json({
         auth_header: `license ${license}`,
-        message: "Ready to upload"
+        message: "Upload authorized"
       });
 
     } else if (action === 'process') {
@@ -105,12 +107,16 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: "Upload ID required" });
       }
 
-      console.log(`Processing upload ID: ${uploadId} with stem: ${stem}`);
+      console.log(`${ip} processing upload ID: ${uploadId} with stem: ${stem}`);
 
-      // Request split
+      // Request separation with standard settings
       const params = JSON.stringify([{ 
         id: uploadId, 
-        stem: stem 
+        stem: stem
+        // Enhanced processing disabled to conserve credits
+        // filter: 1,
+        // enhanced_processing_enabled: true,
+        // dereverb_enabled: true
       }]);
       
       const splitResponse = await fetch("https://www.lalal.ai/api/split/", {
@@ -177,7 +183,8 @@ export default async function handler(req, res) {
       }
 
       // Success! Increment rate limit and return result
-      incrementRateLimit(ip);
+      // Rate limiting commented out for testing
+      // incrementRateLimit(ip);
       
       console.log(`Processing complete for ${ip}. Back track: ${processingResult.back_track}`);
 
@@ -191,16 +198,17 @@ export default async function handler(req, res) {
       });
 
     } else {
-      return res.status(400).json({ error: "Invalid action" });
+      return res.status(400).json({ error: "Invalid action specified" });
     }
 
   } catch (error) {
     console.error("API error:", error);
     
     // Don't count failed attempts against rate limit for processing
-    if (req.body.action === 'process') {
-      decrementRateLimit(ip);
-    }
+    // Rate limiting commented out for testing
+    // if (req.body?.action === 'process') {
+    //   decrementRateLimit(ip);
+    // }
     
     return res.status(500).json({
       error: "Server error",
