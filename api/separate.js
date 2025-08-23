@@ -1,9 +1,7 @@
-// pages/api/separate.js - Fixed for Vercel
-import formidable from "formidable";
+// pages/api/separate.js - Direct Upload Approach
 import fetch from "node-fetch";
-import { readFileSync } from "fs";
 
-export const config = { api: { bodyParser: false } };
+export const config = { api: { bodyParser: true } };
 
 // Simple in-memory rate limiting
 const DAILY_LIMIT = 2;
@@ -70,37 +68,16 @@ export default async function handler(req, res) {
   }
 
   const ip = getClientIP(req);
-  
-  // Check rate limiting
-  if (!checkRateLimit(ip)) {
-    return res.status(429).json({
-      error: "Daily limit exceeded",
-      message: "You have reached your daily limit of 2 uploads. Try again tomorrow!",
-    });
-  }
-
   const license = process.env.LALAL_API_KEY;
+  
   if (!license) {
     return res.status(500).json({ error: "Server configuration error" });
   }
 
   try {
-    // Parse multipart form data
-    const { fields, files } = await new Promise((resolve, reject) => {
-      const form = formidable({
-        multiples: false,
-        maxFileSize: Infinity, // No size limit
-        keepExtensions: true,
-      });
-      
-      form.parse(req, (err, fields, files) => {
-        if (err) reject(err);
-        else resolve({ fields, files });
-      });
-    });
+    const { action, filename, stem, uploadId } = req.body;
 
-    // Validate stem
-    const stem = String(fields.stem || "").trim();
+    // Validate stem for both actions
     if (!ALLOWED_STEMS.has(stem)) {
       return res.status(400).json({
         error: "Invalid stem",
@@ -108,151 +85,122 @@ export default async function handler(req, res) {
       });
     }
 
-    // Validate file
-    const file = files.file;
-    if (!file) {
-      return res.status(400).json({ error: "No file uploaded" });
-    }
-
-    // Read file buffer (fixed for Vercel)
-    let fileBuffer;
-    try {
-      if (file.filepath) {
-        fileBuffer = readFileSync(file.filepath);
-      } else if (file.buffer) {
-        fileBuffer = file.buffer;
-      } else {
-        throw new Error("Cannot read file data");
+    if (action === 'upload') {
+      // Step 1: Prepare for upload - just return auth header
+      if (!checkRateLimit(ip)) {
+        return res.status(429).json({
+          error: "Daily limit exceeded",
+          message: "You have reached your daily limit of 2 uploads. Try again tomorrow!",
+        });
       }
-    } catch (fileError) {
-      console.error("File read error:", fileError);
-      return res.status(400).json({ 
-        error: "File read failed",
-        message: "Unable to process uploaded file"
+
+      return res.status(200).json({
+        auth_header: `license ${license}`,
+        message: "Ready to upload"
       });
-    }
 
-    // Step 1: Upload to LALAL.AI
-    console.log("Uploading to LALAL.AI...");
-    
-    const uploadResponse = await fetch("https://www.lalal.ai/api/upload/", {
-      method: "POST",
-      headers: {
-        Authorization: `license ${license}`,
-        "Content-Disposition": `attachment; filename="${file.originalFilename || "input.mp3"}"`
-      },
-      body: fileBuffer // Use buffer instead of stream
-    });
+    } else if (action === 'process') {
+      // Step 2: Process the uploaded file
+      if (!uploadId) {
+        return res.status(400).json({ error: "Upload ID required" });
+      }
 
-    if (!uploadResponse.ok) {
-      const errorText = await uploadResponse.text().catch(() => "");
-      console.error("Upload failed:", uploadResponse.status, errorText);
-      return res.status(502).json({ 
-        error: "Upload failed", 
-        message: "Failed to upload file to processing service"
-      });
-    }
+      console.log(`Processing upload ID: ${uploadId} with stem: ${stem}`);
 
-    const uploadResult = await uploadResponse.json();
-    const uploadId = uploadResult.id;
-    const durationSec = Math.round(uploadResult.duration || 0);
-
-    console.log(`Upload successful. ID: ${uploadId}, Duration: ${durationSec}s`);
-
-    // No duration limit - process any length track
-
-    // Step 2: Request split
-    console.log("Requesting separation...");
-    
-    const params = JSON.stringify([{ 
-      id: uploadId, 
-      stem: stem 
-    }]);
-    
-    const splitResponse = await fetch("https://www.lalal.ai/api/split/", {
-      method: "POST",
-      headers: {
-        Authorization: `license ${license}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({ params }),
-    });
-
-    const splitResult = await splitResponse.json().catch(() => ({}));
-    
-    if (splitResult?.status !== "success") {
-      console.error("Split request failed:", splitResult);
-      return res.status(502).json({
-        error: "Processing initialization failed",
-        message: "Unable to start audio processing"
-      });
-    }
-
-    console.log("Processing started, polling for completion...");
-
-    // Step 3: Poll for completion
-    const maxAttempts = 120; // 4 minutes max
-    let attempt = 0;
-    let processingResult = null;
-
-    while (attempt < maxAttempts) {
-      const checkResponse = await fetch("https://www.lalal.ai/api/check/", {
+      // Request split
+      const params = JSON.stringify([{ 
+        id: uploadId, 
+        stem: stem 
+      }]);
+      
+      const splitResponse = await fetch("https://www.lalal.ai/api/split/", {
         method: "POST",
         headers: {
           Authorization: `license ${license}`,
           "Content-Type": "application/x-www-form-urlencoded",
         },
-        body: new URLSearchParams({ id: uploadId }),
+        body: new URLSearchParams({ params }),
       });
 
-      const checkResult = await checkResponse.json().catch(() => ({}));
-      const taskInfo = checkResult?.result?.[uploadId];
-      const taskState = taskInfo?.task?.state;
-
-      if (taskState === "success") {
-        processingResult = taskInfo.split;
-        break;
-      } else if (taskState === "error" || taskState === "cancelled") {
-        console.error("Processing failed:", taskInfo?.task?.error);
+      const splitResult = await splitResponse.json().catch(() => ({}));
+      
+      if (splitResult?.status !== "success") {
+        console.error("Split request failed:", splitResult);
         return res.status(502).json({
-          error: "Processing failed",
-          message: "Audio processing encountered an error"
+          error: "Processing initialization failed",
+          message: "Unable to start audio processing"
         });
       }
 
-      // Wait 2 seconds before next check
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      attempt++;
-    }
+      console.log("Processing started, polling for completion...");
 
-    if (!processingResult) {
-      return res.status(504).json({
-        error: "Processing timeout",
-        message: "Processing is taking longer than expected. Please try again."
+      // Poll for completion
+      const maxAttempts = 120; // 4 minutes max
+      let attempt = 0;
+      let processingResult = null;
+
+      while (attempt < maxAttempts) {
+        const checkResponse = await fetch("https://www.lalal.ai/api/check/", {
+          method: "POST",
+          headers: {
+            Authorization: `license ${license}`,
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: new URLSearchParams({ id: uploadId }),
+        });
+
+        const checkResult = await checkResponse.json().catch(() => ({}));
+        const taskInfo = checkResult?.result?.[uploadId];
+        const taskState = taskInfo?.task?.state;
+
+        if (taskState === "success") {
+          processingResult = taskInfo.split;
+          break;
+        } else if (taskState === "error" || taskState === "cancelled") {
+          console.error("Processing failed:", taskInfo?.task?.error);
+          return res.status(502).json({
+            error: "Processing failed",
+            message: "Audio processing encountered an error"
+          });
+        }
+
+        // Wait 2 seconds before next check
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        attempt++;
+      }
+
+      if (!processingResult) {
+        return res.status(504).json({
+          error: "Processing timeout",
+          message: "Processing is taking longer than expected. Please try again."
+        });
+      }
+
+      // Success! Increment rate limit and return result
+      incrementRateLimit(ip);
+      
+      console.log(`Processing complete for ${ip}. Back track: ${processingResult.back_track}`);
+
+      return res.status(200).json({
+        ok: true,
+        id: uploadId,
+        stem_removed: stem,
+        back_track_url: processingResult.back_track,
+        stem_track_url: processingResult.stem_track,
+        message: `${stem === 'voice' ? 'Vocals' : stem} removed successfully`
       });
+
+    } else {
+      return res.status(400).json({ error: "Invalid action" });
     }
-
-    // Success! Increment rate limit and return result
-    incrementRateLimit(ip);
-    
-    console.log(`Processing complete for ${ip}. Back track: ${processingResult.back_track}`);
-
-    // Return response matching what frontend expects
-    return res.status(200).json({
-      ok: true,
-      id: uploadId,
-      stem_removed: stem,
-      duration_sec: durationSec,
-      back_track_url: processingResult.back_track, // Fixed field name
-      stem_track_url: processingResult.stem_track,
-      message: `${stem === 'voice' ? 'Vocals' : stem} removed successfully`
-    });
 
   } catch (error) {
-    console.error("Processing error:", error);
+    console.error("API error:", error);
     
-    // Don't count failed attempts against rate limit
-    decrementRateLimit(ip);
+    // Don't count failed attempts against rate limit for processing
+    if (req.body.action === 'process') {
+      decrementRateLimit(ip);
+    }
     
     return res.status(500).json({
       error: "Server error",
