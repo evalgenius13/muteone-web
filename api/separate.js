@@ -1,241 +1,243 @@
-// Vercel API route: api/separate.js
-import fetch from 'node-fetch';
-import FormData from 'form-data';
+// pages/api/separate.js - Correct LALAL.AI Integration
+import formidable from "formidable";
+import fetch from "node-fetch";
+import { createReadStream } from "fs";
 
-// Rate limiting storage (use a simple in-memory store for demo)
-// In production, use Redis or a database
+export const config = { api: { bodyParser: false } };
+
+const DAILY_LIMIT = 2;
+// Simple in-memory store for rate limiting
 const dailyUploads = new Map();
 
-// Get client IP address
 function getClientIP(req) {
-  return req.headers['x-forwarded-for']?.split(',')[0] || 
-         req.headers['x-real-ip'] || 
-         '127.0.0.1';
+  return req.headers["x-forwarded-for"]?.split(",")[0]
+      || req.headers["x-real-ip"]
+      || req.socket?.remoteAddress
+      || "127.0.0.1";
 }
 
-// Rate limiting functions
 function checkRateLimit(ip) {
   const today = new Date().toDateString();
-  const userData = dailyUploads.get(ip);
-  
-  if (!userData || userData.date !== today) {
+  const data = dailyUploads.get(ip);
+  if (!data || data.date !== today) {
     dailyUploads.set(ip, { count: 0, date: today });
     return true;
   }
-  
-  return userData.count < 2;
+  return data.count < DAILY_LIMIT;
 }
 
 function incrementRateLimit(ip) {
   const today = new Date().toDateString();
-  const userData = dailyUploads.get(ip) || { count: 0, date: today };
-  userData.count += 1;
-  dailyUploads.set(ip, userData);
+  const data = dailyUploads.get(ip) || { count: 0, date: today };
+  data.count += 1;
+  dailyUploads.set(ip, data);
 }
 
-// Parse multipart form data for Vercel
-async function parseMultipartForm(req) {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    req.on('data', chunk => chunks.push(chunk));
-    req.on('end', () => {
-      try {
-        const buffer = Buffer.concat(chunks);
-        const boundary = req.headers['content-type'].split('boundary=')[1];
-        
-        if (!boundary) {
-          return reject(new Error('No boundary found'));
-        }
-        
-        const parts = buffer.toString().split(`--${boundary}`);
-        const formData = {};
-        let fileData = null;
-        
-        for (const part of parts) {
-          if (part.includes('Content-Disposition: form-data')) {
-            const lines = part.split('\r\n');
-            const disposition = lines.find(line => line.includes('Content-Disposition'));
-            
-            if (disposition.includes('name="stem"')) {
-              const stemValue = lines[lines.length - 2];
-              formData.stem = stemValue;
-            } else if (disposition.includes('name="file"')) {
-              const filenameMatch = disposition.match(/filename="([^"]+)"/);
-              if (filenameMatch) {
-                const contentTypeHeader = lines.find(line => line.includes('Content-Type:'));
-                const contentType = contentTypeHeader ? contentTypeHeader.split(': ')[1] : 'audio/mpeg';
-                
-                // Find the start of binary data (after empty line)
-                const emptyLineIndex = lines.findIndex(line => line === '');
-                const binaryStart = lines.slice(emptyLineIndex + 1).join('\r\n');
-                
-                // Remove the trailing boundary
-                const binaryData = binaryStart.split('\r\n--')[0];
-                
-                fileData = {
-                  filename: filenameMatch[1],
-                  contentType: contentType,
-                  data: Buffer.from(binaryData, 'binary'),
-                  size: Buffer.from(binaryData, 'binary').length
-                };
-              }
-            }
-          }
-        }
-        
-        resolve({ formData, fileData });
-      } catch (error) {
-        reject(error);
-      }
-    });
-  });
-}
-
-// Estimate duration
-function estimateDuration(file) {
-  const sizeInMB = file.size / (1024 * 1024);
-  if (file.contentType === 'audio/wav') {
-    return sizeInMB * 6;
-  } else {
-    return sizeInMB * 60;
+function decrementRateLimit(ip) {
+  const data = dailyUploads.get(ip);
+  if (data) { 
+    data.count = Math.max(0, data.count - 1); 
+    dailyUploads.set(ip, data); 
   }
 }
 
-// Helper functions
-function getFileExtension(filename) {
-  return filename.split('.').pop().toLowerCase();
-}
+// LALAL.AI supported stems
+const ALLOWED_STEMS = new Set([
+  "voice", "drum", "bass", "piano", "electric_guitar", "acoustic_guitar",
+  "synthesizer", "strings", "wind"
+]);
 
-function getBaseName(filename) {
-  return filename.replace(/\.[^/.]+$/, '');
-}
-
-// Main handler
 export default async function handler(req, res) {
-  // Enable CORS
-  res.setHeader('Access-Control-Allow-Credentials', true);
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
-
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
+  // CORS headers
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
+  
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+  
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+  const ip = getClientIP(req);
+  
+  // Check rate limiting
+  if (!checkRateLimit(ip)) {
+    return res.status(429).json({ 
+      error: "Daily limit exceeded", 
+      message: "You have reached your daily limit of 2 uploads. Try again tomorrow!" 
+    });
   }
-
-  const clientIP = getClientIP(req);
 
   try {
-    // Check rate limiting
-    if (!checkRateLimit(clientIP)) {
-      return res.status(429).json({ 
-        error: 'Daily limit exceeded',
-        message: 'You have reached your daily limit of 2 uploads. Try again tomorrow!'
+    // Parse multipart form data
+    const { fields, files } = await new Promise((resolve, reject) => {
+      const form = formidable({ 
+        multiples: false, 
+        maxFileSize: 60 * 1024 * 1024, // 60MB max
+        keepExtensions: true
       });
-    }
-
-    // Parse form data
-    const { formData, fileData } = await parseMultipartForm(req);
-
-    if (!fileData) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
-
-    const stem = formData.stem;
-    if (!stem || !['vocals', 'drums', 'bass', 'other'].includes(stem)) {
-      return res.status(400).json({ error: 'Invalid stem type' });
-    }
-
-    // Validate file size (50MB limit)
-    if (fileData.size > 50 * 1024 * 1024) {
-      return res.status(400).json({ 
-        error: 'File too large',
-        message: 'Maximum file size is 50MB'
+      
+      form.parse(req, (err, fields, files) => {
+        if (err) reject(err);
+        else resolve({ fields, files });
       });
-    }
-
-    // Validate file type
-    const allowedTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/flac', 'audio/m4a'];
-    const fileExtension = getFileExtension(fileData.filename);
-    const validExtensions = ['mp3', 'wav', 'flac', 'm4a', 'ogg'];
-    
-    if (!allowedTypes.includes(fileData.contentType) && !validExtensions.includes(fileExtension)) {
-      return res.status(400).json({ 
-        error: 'Invalid file type',
-        message: 'Please upload MP3, WAV, FLAC, or M4A files'
-      });
-    }
-
-    // Check duration limit
-    const estimatedDuration = estimateDuration(fileData);
-    if (estimatedDuration > 300) { // 5:00 limit
-      return res.status(400).json({ 
-        error: 'Track too long',
-        message: 'Maximum track length is 5 minutes'
-      });
-    }
-
-    // Increment rate limit
-    incrementRateLimit(clientIP);
-
-    // Prepare LALAL.AI request
-    const formDataForAPI = new FormData();
-    formDataForAPI.append('file', fileData.data, {
-      filename: fileData.filename,
-      contentType: fileData.contentType
     });
-    formDataForAPI.append('stem', stem);
-    formDataForAPI.append('filter', '1');
 
-    // Call LALAL.AI API
-    const LALAL_API_KEY = process.env.LALAL_API_KEY;
-    const response = await fetch('https://www.lalal.ai/api/split/', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LALAL_API_KEY}`,
-        ...formDataForAPI.getHeaders()
+    // Validate stem
+    const stem = String(fields.stem || "").trim();
+    if (!ALLOWED_STEMS.has(stem)) {
+      return res.status(400).json({ 
+        error: "Invalid stem", 
+        message: "Please select a valid instrument to remove",
+        allowed: [...ALLOWED_STEMS] 
+      });
+    }
+
+    // Validate file
+    const file = files.file;
+    if (!file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+
+    // Check API key
+    const license = process.env.LALAL_API_KEY;
+    if (!license) {
+      return res.status(500).json({ error: "Server configuration error" });
+    }
+
+    // Step 1: Upload to LALAL.AI
+    console.log("Uploading to LALAL.AI...");
+    const uploadResponse = await fetch("https://www.lalal.ai/api/upload/", {
+      method: "POST",
+      headers: { 
+        "Authorization": `license ${license}`,
+        "Content-Disposition": `attachment; filename="${file.originalFilename || "input.mp3"}"`
       },
-      body: formDataForAPI
+      body: createReadStream(file.filepath)
     });
 
-    if (!response.ok) {
-      console.error('LALAL.AI error:', response.status, await response.text());
-      
-      // Decrement rate limit on failure
-      const userData = dailyUploads.get(clientIP);
-      if (userData) {
-        userData.count = Math.max(0, userData.count - 1);
-        dailyUploads.set(clientIP, userData);
-      }
-      
-      if (response.status === 401) {
-        return res.status(500).json({ error: 'Service temporarily unavailable' });
-      } else if (response.status === 402) {
-        return res.status(500).json({ error: 'Service quota exceeded. Please try again later.' });
-      } else {
-        return res.status(500).json({ error: 'Processing failed. Please try again.' });
-      }
+    if (!uploadResponse.ok) {
+      const errorText = await uploadResponse.text();
+      console.error("Upload failed:", errorText);
+      return res.status(502).json({ 
+        error: "Upload failed", 
+        message: "Failed to upload to processing service"
+      });
     }
 
-    // Get processed audio
-    const audioBuffer = await response.buffer();
-    const filename = `${getBaseName(fileData.filename)}_no_${stem}.mp3`;
+    const uploadResult = await uploadResponse.json();
+    const uploadId = uploadResult.id;
+    const duration = uploadResult.duration || 0;
+
+    console.log(`Upload successful. ID: ${uploadId}, Duration: ${duration}s`);
+
+    // Enforce 5-minute limit (300 seconds)
+    if (duration > 300) {
+      return res.status(400).json({ 
+        error: "Track too long", 
+        message: "Maximum track length is 5 minutes. Your track is " + Math.ceil(duration/60) + " minutes long." 
+      });
+    }
+
+    // Step 2: Request separation
+    console.log("Requesting separation...");
+    const params = JSON.stringify([{ 
+      id: uploadId, 
+      stem: stem,
+      // Optional quality settings
+      filter: 1,
+      enhanced_processing_enabled: true
+    }]);
     
-    // Send response
-    res.setHeader('Content-Type', 'audio/mpeg');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.setHeader('Content-Length', audioBuffer.length);
-    res.send(audioBuffer);
+    const splitResponse = await fetch("https://www.lalal.ai/api/split/", {
+      method: "POST",
+      headers: { 
+        "Authorization": `license ${license}`, 
+        "Content-Type": "application/x-www-form-urlencoded" 
+      },
+      body: new URLSearchParams({ params })
+    });
+
+    const splitResult = await splitResponse.json();
+    if (splitResult.status !== "success") {
+      console.error("Split request failed:", splitResult);
+      return res.status(502).json({ 
+        error: "Processing initialization failed", 
+        message: "Unable to start audio processing"
+      });
+    }
+
+    console.log("Processing started, polling for completion...");
+
+    // Step 3: Poll for completion
+    let attempts = 0;
+    const maxAttempts = 120; // 4 minutes max polling
+    let processingResult = null;
+
+    while (attempts < maxAttempts) {
+      const checkResponse = await fetch("https://www.lalal.ai/api/check/", {
+        method: "POST",
+        headers: { 
+          "Authorization": `license ${license}`, 
+          "Content-Type": "application/x-www-form-urlencoded" 
+        },
+        body: new URLSearchParams({ id: uploadId })
+      });
+
+      const checkResult = await checkResponse.json();
+      const taskInfo = checkResult?.result?.[uploadId];
+      const taskState = taskInfo?.task?.state;
+
+      if (taskState === "success") {
+        processingResult = taskInfo.split;
+        break;
+      } else if (taskState === "error" || taskState === "cancelled") {
+        console.error("Processing failed:", taskInfo?.task?.error);
+        return res.status(502).json({ 
+          error: "Processing failed", 
+          message: "Audio processing encountered an error"
+        });
+      }
+
+      // Wait 2 seconds before next check
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      attempts++;
+    }
+
+    if (!processingResult) {
+      return res.status(504).json({ 
+        error: "Processing timeout", 
+        message: "Processing is taking longer than expected. Please try again."
+      });
+    }
+
+    // Success! Increment rate limit and return URLs
+    incrementRateLimit(ip);
+    
+    console.log(`Processing complete for ${ip}. Back track: ${processingResult.back_track}`);
+
+    return res.status(200).json({
+      ok: true,
+      id: uploadId,
+      stem_removed: stem,
+      duration: Math.ceil(duration),
+      back_track_url: processingResult.back_track, // WAV download URL
+      stem_track_url: processingResult.stem_track, // Isolated stem (optional)
+      message: `${stem === 'voice' ? 'Vocals' : stem} removed successfully`
+    });
 
   } catch (error) {
-    console.error('API error:', error);
-    res.status(500).json({ 
-      error: 'Processing failed',
-      message: 'Please try again'
+    console.error("Processing error:", error);
+    
+    // Don't count failed attempts against rate limit
+    decrementRateLimit(ip);
+    
+    return res.status(500).json({ 
+      error: "Server error", 
+      message: "An unexpected error occurred. Please try again."
     });
   }
 }
