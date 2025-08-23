@@ -4,7 +4,7 @@ import fetch from "node-fetch";
 export const config = { api: { bodyParser: true } };
 
 // Simple in-memory rate limiting
-const DAILY_LIMIT = 2;
+const DAILY_LIMIT = 3;
 const dailyUploads = new Map();
 
 function getClientIP(req) {
@@ -90,7 +90,7 @@ export default async function handler(req, res) {
       // if (!checkRateLimit(ip)) {
       //   return res.status(429).json({
       //     error: "Daily limit exceeded",
-      //     message: "You have reached your daily limit of 2 uploads. Try again tomorrow!",
+      //     message: "You have reached your daily limit of 3 uploads. Try again tomorrow!",
       //   });
       // }
 
