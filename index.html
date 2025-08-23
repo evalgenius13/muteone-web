@@ -270,9 +270,9 @@
             <div class="upload-icon">🎵</div>
             <div class="upload-text">Drop your audio file here or click to browse</div>
             <div style="font-size: 14px; color: #999; margin-top: 5px;">
-                Supports MP3, WAV, FLAC, M4A • Max 5 minutes • 50MB limit
+                Supports all audio formats
             </div>
-            <input type="file" class="file-input" id="fileInput" accept="audio/*">
+            <input type="file" class="file-input" id="fileInput" accept="audio/*,video/*">
         </div>
         
         <div class="file-info" id="fileInfo">
@@ -315,7 +315,7 @@
         <div class="pricing-info">
             <div class="price" style="color: #10b981;">FREE</div>
             <div class="price-description">
-                Up to 5 minutes • 2 uploads per day • High quality WAV
+                High quality audio • 2 uploads per day
             </div>
         </div>
         
@@ -417,23 +417,13 @@
         }
         
         function handleFile(file) {
-            // Validate file type
-            const validTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/flac', 'audio/m4a', 'audio/ogg'];
-            if (!validTypes.some(type => file.type === type || file.name.toLowerCase().endsWith(type.split('/')[1]))) {
-                showError('Please upload a valid audio file (MP3, WAV, FLAC, M4A)');
-                return;
-            }
+            // Basic file type validation - allow all audio files
+            const fileName = file.name.toLowerCase();
+            const audioExtensions = ['.mp3', '.wav', '.flac', '.m4a', '.aac', '.ogg', '.wma', '.aiff', '.mp4', '.m4v'];
+            const isAudioFile = audioExtensions.some(ext => fileName.endsWith(ext));
             
-            // Check file size (max 50MB)
-            if (file.size > 50 * 1024 * 1024) {
-                showError('File too large. Maximum size is 50MB');
-                return;
-            }
-            
-            // Estimate duration (rough approximation: 1MB ≈ 1 minute for MP3)
-            const estimatedDuration = file.size / (1024 * 1024) * 60; // seconds
-            if (estimatedDuration > 300) { // 5:00 limit
-                showError('File appears to be longer than 5:00. Please upload a shorter track.');
+            if (!isAudioFile) {
+                showError('Please upload an audio file');
                 return;
             }
             
@@ -441,10 +431,7 @@
             
             // Show file info
             fileName.textContent = file.name;
-            const durationText = estimatedDuration > 60 ? 
-                `~${Math.floor(estimatedDuration/60)}:${Math.floor(estimatedDuration%60).toString().padStart(2,'0')}` : 
-                `~${Math.floor(estimatedDuration)}s`;
-            fileDetails.textContent = `${(file.size / 1024 / 1024).toFixed(1)}MB • ${durationText} • ${file.type || 'Audio file'}`;
+            fileDetails.textContent = `${(file.size / 1024 / 1024).toFixed(1)}MB • ${file.type || 'Audio file'}`;
             fileInfo.style.display = 'block';
             hideError();
             
