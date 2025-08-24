@@ -48,7 +48,7 @@ function checkRateLimit(ip) {
   if (WHITELISTED_IPS.has(ip)) {
     return { 
       allowed: true, 
-      remaining: 999, // Show high number for whitelisted IPs
+      remaining: DAILY_LIMIT, // Show normal number for whitelisted IPs
       whitelisted: true 
     };
   }
@@ -164,10 +164,10 @@ export default async function handler(req, res) {
       }
 
       // Server-side file size validation
-      if (fileSize && fileSize > 50 * 1024 * 1024) {
+      if (fileSize && fileSize > 80 * 1024 * 1024) {
         return res.status(413).json({
           error: "File too large",
-          message: "File must be under 50MB. For 5-minute limit, try a smaller file or lower quality."
+          message: "File must be under 80MB. For 5-minute limit, try a smaller file or lower quality."
         });
       }
 
