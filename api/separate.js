@@ -6,6 +6,19 @@ export const config = { api: { bodyParser: true } };
 // Simple in-memory rate limiting with cleanup
 const DAILY_LIMIT = 3;
 const MAX_DURATION_SECONDS = 300; // 5 minutes
+
+// Load whitelisted IPs from environment variables
+const getWhitelistedIPs = () => {
+  const whitelist = process.env.WHITELISTED_IPS || '';
+  return new Set(
+    whitelist
+      .split(',')
+      .map(ip => ip.trim())
+      .filter(ip => ip.length > 0)
+  );
+};
+
+const WHITELISTED_IPS = getWhitelistedIPs();
 const dailyUploads = new Map();
 
 // Clean up old entries to prevent memory leaks
@@ -31,6 +44,15 @@ function getClientIP(req) {
 }
 
 function checkRateLimit(ip) {
+  // Check if IP is whitelisted - bypass all rate limits
+  if (WHITELISTED_IPS.has(ip)) {
+    return { 
+      allowed: true, 
+      remaining: 999, // Show high number for whitelisted IPs
+      whitelisted: true 
+    };
+  }
+
   const today = new Date().toDateString();
   const data = dailyUploads.get(ip);
   if (!data || data.date !== today) {
@@ -38,7 +60,7 @@ function checkRateLimit(ip) {
     return { allowed: true, remaining: DAILY_LIMIT };
   }
   
-  // Prevent concurrent processing from same IP
+  // Prevent concurrent processing from same IP (unless whitelisted)
   if (data.processing) {
     return { allowed: false, remaining: Math.max(0, DAILY_LIMIT - data.count), error: "Already processing a file" };
   }
@@ -50,6 +72,9 @@ function checkRateLimit(ip) {
 }
 
 function setProcessing(ip, processing) {
+  // Skip processing tracking for whitelisted IPs
+  if (WHITELISTED_IPS.has(ip)) return;
+  
   const today = new Date().toDateString();
   const data = dailyUploads.get(ip) || { count: 0, date: today };
   data.processing = processing;
@@ -57,6 +82,9 @@ function setProcessing(ip, processing) {
 }
 
 function incrementRateLimit(ip) {
+  // Skip rate limiting for whitelisted IPs
+  if (WHITELISTED_IPS.has(ip)) return;
+  
   const today = new Date().toDateString();
   const data = dailyUploads.get(ip) || { count: 0, date: today, processing: false };
   data.count += 1;
@@ -65,6 +93,9 @@ function incrementRateLimit(ip) {
 }
 
 function decrementRateLimit(ip) {
+  // Skip rate limiting for whitelisted IPs  
+  if (WHITELISTED_IPS.has(ip)) return;
+  
   const data = dailyUploads.get(ip);
   if (data) {
     data.count = Math.max(0, data.count - 1);
@@ -106,8 +137,8 @@ export default async function handler(req, res) {
   try {
     const { action, filename, stem, uploadId, fileSize, estimatedDuration } = req.body;
 
-    // Validate stem
-    if (!ALLOWED_STEMS.has(stem)) {
+    // Only validate stem for actions that require it (not check_limit)
+    if (action !== 'check_limit' && !ALLOWED_STEMS.has(stem)) {
       return res.status(400).json({
         error: "Invalid stem",
         message: "Choose one of: " + [...ALLOWED_STEMS].join(", "),
@@ -269,6 +300,7 @@ export default async function handler(req, res) {
       }
 
     } else if (action === 'check_limit') {
+      // Limit check doesn't require stem validation - use default
       const rateCheck = checkRateLimit(ip);
       return res.status(200).json({
         remaining: rateCheck.remaining,
