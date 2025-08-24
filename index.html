@@ -299,6 +299,10 @@
 </head>
 <body>
     <div class="container">
+        <div style="text-align: center; margin-bottom: 20px; padding: 10px; background: #f0f0f0; border-radius: 8px; font-family: monospace; font-size: 14px; color: #666;">
+            Your IP: <span id="userIP">Loading...</span>
+        </div>
+        
         <div class="header">
             <div class="logo">MuteOne™</div>
             <div class="tagline">Remove one instrument, keep the rest!</div>
@@ -427,6 +431,18 @@
         
         // Initialize
         checkUsageLimit();
+        getUserIP();
+        
+        // Get user IP address
+        async function getUserIP() {
+            try {
+                const response = await fetch('https://api.ipify.org?format=json');
+                const data = await response.json();
+                document.getElementById('userIP').textContent = data.ip;
+            } catch (error) {
+                document.getElementById('userIP').textContent = 'Unable to detect';
+            }
+        }
         
         // File upload handling
         uploadArea.addEventListener('click', () => fileInput.click());
@@ -476,10 +492,11 @@
         function updateUsageDisplay() {
             if (remainingUploads > 0) {
                 usageInfo.innerHTML = `<strong>${remainingUploads} uploads remaining today</strong> • Resets at midnight`;
-            } else {
-                usageInfo.innerHTML = '<strong style="color: #dc2626;">Daily limit reached</strong> • Try again tomorrow';
-                processBtn.disabled = true;
-                processBtn.textContent = 'Daily limit reached - Try again tomorrow';
+                } else {
+                    usageInfo.innerHTML = '<strong style="color: #dc2626;">Daily limit reached</strong> • Try again tomorrow';
+                    processBtn.disabled = true;
+                    processBtn.textContent = 'Daily limit reached - Try again tomorrow';
+                }
             }
         }
                 usageInfo.innerHTML = '<strong style="color: #dc2626;">Daily limit reached</strong> • Try again tomorrow';
