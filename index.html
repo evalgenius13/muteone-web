@@ -307,7 +307,7 @@
         <div class="upload-area" id="uploadArea">
             <div class="upload-icon">🎵</div>
             <div class="upload-text">Drop your audio file here or click to browse</div>
-            <div class="upload-subtext">MP3, WAV, FLAC, M4A • Max 5 minutes • Under 50MB</div>
+            <div class="upload-subtext">MP3, WAV, FLAC, M4A • Max 5 minutes • Under 80MB</div>
             <input type="file" class="file-input" id="fileInput" accept="audio/*,video/*">
         </div>
         
@@ -453,11 +453,20 @@
                 const response = await fetch('/api/separate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'check_limit' })
+                    body: JSON.stringify({ 
+                        action: 'check_limit',
+                        stem: 'voice' // Default stem for limit check
+                    })
                 });
-                const data = await response.json();
-                remainingUploads = data.remaining;
-                updateUsageDisplay();
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    remainingUploads = data.remaining;
+                    updateUsageDisplay();
+                } else {
+                    console.error('Failed to check usage limit:', response.status);
+                    usageInfo.textContent = 'Unable to check usage limit';
+                }
             } catch (error) {
                 console.error('Failed to check usage limit:', error);
                 usageInfo.textContent = 'Unable to check usage limit';
@@ -468,6 +477,11 @@
             if (remainingUploads > 0) {
                 usageInfo.innerHTML = `<strong>${remainingUploads} uploads remaining today</strong> • Resets at midnight`;
             } else {
+                usageInfo.innerHTML = '<strong style="color: #dc2626;">Daily limit reached</strong> • Try again tomorrow';
+                processBtn.disabled = true;
+                processBtn.textContent = 'Daily limit reached - Try again tomorrow';
+            }
+        }
                 usageInfo.innerHTML = '<strong style="color: #dc2626;">Daily limit reached</strong> • Try again tomorrow';
                 processBtn.disabled = true;
                 processBtn.textContent = 'Daily limit reached - Try again tomorrow';
@@ -525,8 +539,8 @@
                 return;
             }
             
-            if (file.size > 50 * 1024 * 1024) {
-                showError('File is too large (over 50MB). Please try a shorter audio clip or compress the file.');
+            if (file.size > 80 * 1024 * 1024) {
+                showError('File is too large (over 80MB). Please try a shorter audio clip or compress the file.');
                 return;
             }
             
@@ -711,7 +725,7 @@
                 
                 if (!uploadResponse.ok) {
                     if (uploadResponse.status === 413) {
-                        throw new Error("File is too large for processing. Please try a file under 50MB or 5 minutes long.");
+                        throw new Error("File is too large for processing. Please try a file under 80MB or 5 minutes long.");
                     } else if (uploadResponse.status === 415) {
                         throw new Error("This file format isn't supported. Please try MP3, WAV, FLAC, or M4A files.");
                     } else {
