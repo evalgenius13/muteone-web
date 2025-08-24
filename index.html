@@ -82,6 +82,11 @@
             margin-bottom: 10px;
         }
         
+        .upload-subtext {
+            color: #999;
+            font-size: 14px;
+        }
+        
         .file-input {
             display: none;
         }
@@ -148,6 +153,15 @@
         .price-description {
             color: #666;
             font-size: 14px;
+        }
+        
+        .usage-info {
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(102, 126, 234, 0.1);
+            border-radius: 6px;
+            font-size: 13px;
+            color: #4c51bf;
         }
         
         .process-btn {
@@ -249,6 +263,29 @@
             font-size: 14px;
         }
         
+        .duration-info {
+            margin-top: 8px;
+            padding: 8px 12px;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            border-radius: 6px;
+            color: #059669;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        
+        .duration-warning {
+            background: rgba(245, 158, 11, 0.1);
+            border-color: rgba(245, 158, 11, 0.3);
+            color: #d97706;
+        }
+        
+        .duration-error {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: rgba(239, 68, 68, 0.3);
+            color: #dc2626;
+        }
+        
         .error {
             display: none;
             background: #fef2f2;
@@ -270,14 +307,14 @@
         <div class="upload-area" id="uploadArea">
             <div class="upload-icon">🎵</div>
             <div class="upload-text">Drop your audio file here or click to browse</div>
-            <div style="font-size: 14px; color: #999; margin-top: 5px;">
-            </div>
+            <div class="upload-subtext">MP3, WAV, FLAC, M4A • Max 5 minutes • Under 50MB</div>
             <input type="file" class="file-input" id="fileInput" accept="audio/*,video/*">
         </div>
         
         <div class="file-info" id="fileInfo">
             <div class="file-name" id="fileName"></div>
             <div class="file-details" id="fileDetails"></div>
+            <div class="duration-info" id="durationInfo"></div>
         </div>
         
         <div class="error" id="errorMessage"></div>
@@ -315,7 +352,10 @@
         <div class="pricing-info">
             <div class="price">FREE</div>
             <div class="price-description">
-                High quality audio • 3 uploads per day
+                High quality audio separation • 5 minute limit
+            </div>
+            <div class="usage-info" id="usageInfo">
+                Loading usage info...
             </div>
         </div>
         
@@ -350,7 +390,7 @@
                 <a href="#" class="download-btn" id="downloadBtn" download>
                     Download Your Result
                 </a>
-                <div style="margin-top: 12px;">
+                <div style="margin-top: 12px; font-size: 13px; color: #666;" id="remainingInfo">
                 </div>
             </div>
         </div>
@@ -364,6 +404,8 @@
         // Global variables
         let selectedFile = null;
         let selectedInstrument = 'voice';
+        let audioDuration = 0;
+        let remainingUploads = 3;
         
         // DOM elements
         const uploadArea = document.getElementById('uploadArea');
@@ -371,6 +413,7 @@
         const fileInfo = document.getElementById('fileInfo');
         const fileName = document.getElementById('fileName');
         const fileDetails = document.getElementById('fileDetails');
+        const durationInfo = document.getElementById('durationInfo');
         const processBtn = document.getElementById('processBtn');
         const progress = document.getElementById('progress');
         const progressFill = document.getElementById('progressFill');
@@ -379,6 +422,11 @@
         const downloadBtn = document.getElementById('downloadBtn');
         const resultDescription = document.getElementById('resultDescription');
         const errorMessage = document.getElementById('errorMessage');
+        const usageInfo = document.getElementById('usageInfo');
+        const remainingInfo = document.getElementById('remainingInfo');
+        
+        // Initialize
+        checkUsageLimit();
         
         // File upload handling
         uploadArea.addEventListener('click', () => fileInput.click());
@@ -399,6 +447,32 @@
         
         // Process button
         processBtn.addEventListener('click', processAudio);
+        
+        async function checkUsageLimit() {
+            try {
+                const response = await fetch('/api/separate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'check_limit' })
+                });
+                const data = await response.json();
+                remainingUploads = data.remaining;
+                updateUsageDisplay();
+            } catch (error) {
+                console.error('Failed to check usage limit:', error);
+                usageInfo.textContent = 'Unable to check usage limit';
+            }
+        }
+        
+        function updateUsageDisplay() {
+            if (remainingUploads > 0) {
+                usageInfo.innerHTML = `<strong>${remainingUploads} uploads remaining today</strong> • Resets at midnight`;
+            } else {
+                usageInfo.innerHTML = '<strong style="color: #dc2626;">Daily limit reached</strong> • Try again tomorrow';
+                processBtn.disabled = true;
+                processBtn.textContent = 'Daily limit reached - Try again tomorrow';
+            }
+        }
         
         function handleDragOver(e) {
             e.preventDefault();
@@ -426,8 +500,8 @@
             }
         }
         
-        function handleFile(file) {
-            // Enhanced file type validation with helpful messages
+        async function handleFile(file) {
+            // Enhanced file type validation
             const fileNameLower = file.name.toLowerCase();
             const audioExtensions = ['.mp3', '.wav', '.flac', '.m4a', '.aac', '.ogg', '.wma', '.aiff'];
             const videoExtensions = ['.mp4', '.m4v', '.mov', '.avi'];
@@ -440,31 +514,29 @@
                 return;
             }
             
-            // Check if file seems corrupted (0 bytes or suspiciously small)
+            // File size checks
             if (file.size === 0) {
                 showError('This file appears to be empty or corrupted. Please try a different audio file.');
                 return;
             }
             
-            if (file.size < 10000) { // Less than 10KB is suspicious for audio
+            if (file.size < 10000) {
                 showError('This file is too small to be a valid audio file. Please try a different file.');
                 return;
             }
             
-            // Warn about very large files (over 100MB)
-            if (file.size > 100 * 1024 * 1024) {
-                showError('This file is very large and may take longer to process. For best results, try a file under 100MB.');
-                // Don't return - still allow processing
+            if (file.size > 50 * 1024 * 1024) {
+                showError('File is too large (over 50MB). Please try a shorter audio clip or compress the file.');
+                return;
             }
             
             selectedFile = file;
             
-            // Show file info with validation feedback
+            // Show file info
             fileName.textContent = file.name;
             const sizeText = `${(file.size / 1024 / 1024).toFixed(1)}MB`;
             const typeText = file.type || 'Audio file';
             
-            // Add helpful format info
             let formatInfo = '';
             if (fileNameLower.endsWith('.mp3')) formatInfo = ' • High compatibility';
             else if (fileNameLower.endsWith('.wav')) formatInfo = ' • Best quality';
@@ -475,13 +547,99 @@
             fileInfo.style.display = 'block';
             hideError();
             
+            // Estimate duration and validate
+            try {
+                audioDuration = await getAudioDuration(file);
+                updateDurationDisplay(audioDuration);
+                
+                if (audioDuration > 300) { // 5 minutes
+                    showError(`Audio is too long (${formatDuration(audioDuration)}). Maximum length is 5:00. Please trim your audio file.`);
+                    return;
+                }
+            } catch (error) {
+                console.warn('Could not determine audio duration:', error);
+                durationInfo.textContent = '⏱️ Duration: Could not determine (will validate during upload)';
+                durationInfo.className = 'duration-info duration-warning';
+            }
+            
             updateProcessButton();
         }
         
+        function getAudioDuration(file) {
+            return new Promise((resolve, reject) => {
+                const audio = document.createElement('audio');
+                const objectUrl = URL.createObjectURL(file);
+                let resolved = false;
+                
+                const cleanup = () => {
+                    if (!resolved) {
+                        resolved = true;
+                        URL.revokeObjectURL(objectUrl);
+                        audio.remove(); // Properly dispose of audio element
+                    }
+                };
+                
+                audio.addEventListener('loadedmetadata', () => {
+                    cleanup();
+                    resolve(audio.duration);
+                });
+                
+                audio.addEventListener('error', (e) => {
+                    cleanup();
+                    reject(new Error(`Could not load audio metadata: ${e.message || 'Unknown error'}`));
+                });
+                
+                // Set timeout to prevent hanging
+                setTimeout(() => {
+                    if (!resolved) {
+                        cleanup();
+                        reject(new Error('Duration check timeout - file may be corrupted'));
+                    }
+                }, 10000);
+                
+                audio.preload = 'metadata';
+                audio.src = objectUrl;
+            });
+        }
+        
+        function updateDurationDisplay(duration) {
+            const durationText = formatDuration(duration);
+            
+            if (duration <= 300) { // 5 minutes or less
+                durationInfo.textContent = `⏱️ Duration: ${durationText} • Perfect length!`;
+                durationInfo.className = 'duration-info';
+            } else {
+                durationInfo.textContent = `⏱️ Duration: ${durationText} • Too long (max 5:00)`;
+                durationInfo.className = 'duration-info duration-error';
+            }
+        }
+        
+        function formatDuration(seconds) {
+            if (isNaN(seconds) || seconds < 0) return '0:00';
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = Math.floor(seconds % 60);
+            return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+        }
+        
         function updateProcessButton() {
+            if (remainingUploads === 0) {
+                processBtn.disabled = true;
+                processBtn.textContent = 'Daily limit reached - Try again tomorrow';
+                return;
+            }
+            
             if (selectedFile && selectedInstrument) {
-                processBtn.disabled = false;
-                processBtn.textContent = `Remove ${selectedInstrument === 'voice' ? 'vocals' : selectedInstrument} - FREE`;
+                if (audioDuration > 300) {
+                    processBtn.disabled = true;
+                    processBtn.textContent = `Audio too long (${formatDuration(audioDuration)} > 5:00)`;
+                } else if (audioDuration > 0) {
+                    processBtn.disabled = false;
+                    processBtn.textContent = `Remove ${selectedInstrument === 'voice' ? 'vocals' : selectedInstrument} - FREE`;
+                } else {
+                    // Duration unknown, but allow upload (server will validate)
+                    processBtn.disabled = false;
+                    processBtn.textContent = `Remove ${selectedInstrument === 'voice' ? 'vocals' : selectedInstrument} - FREE`;
+                }
             } else {
                 processBtn.disabled = true;
                 processBtn.textContent = 'Upload a file to get started';
@@ -489,7 +647,7 @@
         }
         
         async function processAudio() {
-            if (!selectedFile) return;
+            if (!selectedFile || remainingUploads === 0) return;
             
             // Hide previous results and errors
             result.style.display = 'none';
@@ -503,8 +661,8 @@
             progressText.textContent = 'Starting upload...';
             
             try {
-                // Step 1: Get upload authorization
-                progressText.textContent = 'Preparing upload... (10 seconds)';
+                // Step 1: Get upload authorization with file info
+                progressText.textContent = 'Checking file and preparing upload...';
                 progressFill.style.width = '5%';
                 
                 const authResponse = await fetch('/api/separate', {
@@ -515,16 +673,19 @@
                     body: JSON.stringify({
                         action: 'upload',
                         filename: selectedFile.name,
-                        stem: selectedInstrument
+                        stem: selectedInstrument,
+                        fileSize: selectedFile.size,
+                        estimatedDuration: audioDuration
                     })
                 });
                 
                 if (!authResponse.ok) {
                     const errorData = await authResponse.json();
                     
-                    // Better error messages based on status
                     if (authResponse.status === 429) {
-                        throw new Error(errorData.message || "You've reached your daily limit of 2 uploads. Please try again tomorrow.");
+                        throw new Error(errorData.message || "You've reached your daily limit of 3 uploads. Please try again tomorrow.");
+                    } else if (authResponse.status === 413) {
+                        throw new Error(errorData.message || "File is too large or too long. Please try a smaller file under 5 minutes.");
                     } else if (authResponse.status === 500) {
                         throw new Error("Our servers are temporarily unavailable. Please try again in a few minutes.");
                     } else {
@@ -536,7 +697,8 @@
                 progressFill.style.width = '15%';
                 
                 // Step 2: Upload directly to LALAL.AI
-                progressText.textContent = 'Uploading your file... (30 seconds)';
+                const estimatedTime = Math.max(30, Math.min(120, audioDuration * 2)); // 30-120 seconds based on duration
+                progressText.textContent = `Uploading your file... (~${Math.round(estimatedTime)}s)`;
                 
                 const uploadResponse = await fetch('https://www.lalal.ai/api/upload/', {
                     method: 'POST',
@@ -549,7 +711,7 @@
                 
                 if (!uploadResponse.ok) {
                     if (uploadResponse.status === 413) {
-                        throw new Error("File is too large for processing. Try a shorter audio clip or smaller file size.");
+                        throw new Error("File is too large for processing. Please try a file under 50MB or 5 minutes long.");
                     } else if (uploadResponse.status === 415) {
                         throw new Error("This file format isn't supported. Please try MP3, WAV, FLAC, or M4A files.");
                     } else {
@@ -559,7 +721,9 @@
                 
                 const uploadResult = await uploadResponse.json();
                 progressFill.style.width = '30%';
-                progressText.textContent = 'Upload complete! Starting AI separation... (2-3 minutes)';
+                
+                const processingTime = Math.max(120, audioDuration * 30); // Estimate processing time
+                progressText.textContent = `Upload complete! Starting AI separation... (~${Math.round(processingTime/60)} min)`;
                 
                 // Step 3: Process the uploaded file
                 const processResponse = await fetch('/api/separate', {
@@ -577,11 +741,10 @@
                 if (!processResponse.ok) {
                     const errorData = await processResponse.json();
                     
-                    // Better error messages based on response
                     if (processResponse.status === 502) {
                         throw new Error("AI processing failed - this audio file may be too complex or corrupted. Try a different song.");
                     } else if (processResponse.status === 504) {
-                        throw new Error("Processing is taking longer than usual. The audio servers may be busy - please try again in a few minutes.");
+                        throw new Error("Processing is taking longer than usual. This may happen with longer audio files. Please try again in a few minutes.");
                     } else {
                         throw new Error(errorData.message || "Audio separation failed. Please try again with a different file.");
                     }
@@ -590,9 +753,12 @@
                 const processResult = await processResponse.json();
                 
                 if (processResult.ok) {
+                    // Update remaining uploads
+                    remainingUploads = processResult.remaining_uploads;
+                    
                     // Show success and provide download link
                     progressFill.style.width = '90%';
-                    progressText.textContent = 'Almost done, preparing your download... (5 seconds)';
+                    progressText.textContent = 'Almost done, preparing your download...';
                     
                     setTimeout(() => {
                         progressFill.style.width = '100%';
@@ -603,28 +769,32 @@
                         progress.style.display = 'none';
                         result.style.display = 'block';
                         
-                        // Update success message based on what was removed
+                        // Update success message
                         const instrumentName = selectedInstrument === 'voice' ? 'vocals' : selectedInstrument;
                         resultDescription.textContent = `${instrumentName.charAt(0).toUpperCase() + instrumentName.slice(1)} removed successfully`;
                         
-                        // Update processing info based on instrument
+                        // Update processing info
                         const processingInfo = document.getElementById('processingInfo');
                         if (selectedInstrument === 'voice') {
                             processingInfo.textContent = 'Used professional AI to isolate and remove vocals while preserving all other instruments in high quality. Perfect for karaoke or instrumental versions.';
-                        } else if (selectedInstrument === 'drum') {
-                            processingInfo.textContent = 'Used professional AI to isolate and remove drums while preserving vocals and other instruments in high quality.';
-                        } else if (selectedInstrument === 'bass') {
-                            processingInfo.textContent = 'Used professional AI to isolate and remove bass while preserving vocals and other instruments in high quality.';
                         } else {
                             processingInfo.textContent = `Used professional AI to isolate and remove ${instrumentName} while preserving all other instruments in high quality.`;
                         }
                         
-                        // Set download link with clean filename
-                        const cleanFileName = selectedFile.name.replace(/\.[^/.]+$/, ''); // Remove extension
+                        // Set download link
+                        const cleanFileName = selectedFile.name.replace(/\.[^/.]+$/, '');
                         downloadBtn.href = processResult.back_track_url;
                         downloadBtn.download = `${cleanFileName}_no_${instrumentName}_muteone.${getFileExtension(selectedFile.name)}`;
                         
-                        processBtn.disabled = false;
+                        // Update remaining info
+                        if (remainingUploads > 0) {
+                            remainingInfo.textContent = `${remainingUploads} uploads remaining today`;
+                        } else {
+                            remainingInfo.innerHTML = '<strong style="color: #dc2626;">Daily limit reached</strong> • Try again tomorrow';
+                        }
+                        
+                        // Update usage display and button
+                        updateUsageDisplay();
                         updateProcessButton();
                     }, 2500);
                 } else {
@@ -637,7 +807,6 @@
                 processBtn.disabled = false;
                 updateProcessButton();
                 
-                // Show user-friendly error message
                 showError(error.message);
             }
         }
@@ -654,9 +823,6 @@
         function hideError() {
             errorMessage.style.display = 'none';
         }
-        
-        // Initialize
-        updateProcessButton();
     </script>
 </body>
 </html>
