@@ -1,4 +1,4 @@
-// api/separate.js - Fixed Version with Memory Management
+// api/separate.js - Fixed Android Network Issues
 import fetch from "node-fetch";
 
 export const config = { api: { bodyParser: true } };
@@ -20,6 +20,7 @@ const getWhitelistedIPs = () => {
 
 const WHITELISTED_IPS = getWhitelistedIPs();
 const dailyUploads = new Map();
+const processingStatus = new Map(); // Track processing status for polling
 
 // Clean up old entries to prevent memory leaks
 function cleanupOldEntries() {
@@ -27,6 +28,14 @@ function cleanupOldEntries() {
   for (const [ip, data] of dailyUploads.entries()) {
     if (data.date !== today) {
       dailyUploads.delete(ip);
+    }
+  }
+  
+  // Also cleanup old processing status (older than 10 minutes)
+  const tenMinutesAgo = Date.now() - (10 * 60 * 1000);
+  for (const [uploadId, status] of processingStatus.entries()) {
+    if (status.timestamp < tenMinutesAgo) {
+      processingStatus.delete(uploadId);
     }
   }
 }
@@ -110,6 +119,32 @@ const ALLOWED_STEMS = new Set([
   "acoustic_guitar", "synthesizer", "strings", "wind",
 ]);
 
+// Fetch with Android-friendly timeout and retry logic
+async function fetchWithRetry(url, options, maxRetries = 2, timeoutMs = 30000) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      return response;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      
+      if (attempt === maxRetries - 1) {
+        throw error;
+      }
+      
+      // Wait before retry (exponential backoff)
+      await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+    }
+  }
+}
+
 export default async function handler(req, res) {
   // CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -137,8 +172,8 @@ export default async function handler(req, res) {
   try {
     const { action, filename, stem, uploadId, fileSize, estimatedDuration } = req.body;
 
-    // Only validate stem for actions that require it (not check_limit)
-    if (action !== 'check_limit' && !ALLOWED_STEMS.has(stem)) {
+    // Only validate stem for actions that require it (not check_limit or check_status)
+    if (!['check_limit', 'check_status'].includes(action) && !ALLOWED_STEMS.has(stem)) {
       return res.status(400).json({
         error: "Invalid stem",
         message: "Choose one of: " + [...ALLOWED_STEMS].join(", "),
@@ -199,103 +234,136 @@ export default async function handler(req, res) {
       console.log(`${ip} processing upload ID: ${uploadId} with stem: ${stem}`);
 
       try {
-        // Request separation
+        // Store processing status for later polling
+        processingStatus.set(uploadId, {
+          status: 'processing',
+          stem: stem,
+          ip: ip,
+          timestamp: Date.now()
+        });
+
+        // Request separation with shorter timeout
         const params = JSON.stringify([{ 
           id: uploadId, 
           stem: stem
         }]);
         
-        const splitResponse = await fetch("https://www.lalal.ai/api/split/", {
+        const splitResponse = await fetchWithRetry("https://www.lalal.ai/api/split/", {
           method: "POST",
           headers: {
             Authorization: `license ${license}`,
             "Content-Type": "application/x-www-form-urlencoded",
           },
           body: new URLSearchParams({ params }),
-        });
+        }, 3, 20000); // 20s timeout, 3 retries
 
         const splitResult = await splitResponse.json().catch(() => ({}));
         
         if (splitResult?.status !== "success") {
           console.error("Split request failed:", splitResult);
           decrementRateLimit(ip); // Don't count failed attempts
+          processingStatus.delete(uploadId);
           return res.status(502).json({
             error: "Processing initialization failed",
             message: "Unable to start audio processing. Your upload count has not been affected."
           });
         }
 
-        // Poll for completion with proper timeout
-        const maxAttempts = 180; // 6 minutes max
-        let attempt = 0;
-        let processingResult = null;
+        // Update processing status
+        processingStatus.set(uploadId, {
+          status: 'started',
+          stem: stem,
+          ip: ip,
+          timestamp: Date.now()
+        });
 
-        while (attempt < maxAttempts) {
-          try {
-            const checkResponse = await fetch("https://www.lalal.ai/api/check/", {
-              method: "POST",
-              headers: {
-                Authorization: `license ${license}`,
-                "Content-Type": "application/x-www-form-urlencoded",
-              },
-              body: new URLSearchParams({ id: uploadId }),
-            });
-
-            const checkResult = await checkResponse.json().catch(() => ({}));
-            const taskInfo = checkResult?.result?.[uploadId];
-            const taskState = taskInfo?.task?.state;
-
-            if (taskState === "success") {
-              processingResult = taskInfo.split;
-              break;
-            } else if (taskState === "error" || taskState === "cancelled") {
-              console.error("Processing failed:", taskInfo?.task?.error);
-              decrementRateLimit(ip);
-              return res.status(502).json({
-                error: "Processing failed",
-                message: "Audio processing encountered an error. Your upload count has not been affected."
-              });
-            }
-
-            await new Promise((resolve) => setTimeout(resolve, 2000));
-            attempt++;
-          } catch (pollError) {
-            console.error("Polling error:", pollError);
-            // Continue polling unless it's a critical error
-            attempt++;
-          }
-        }
-
-        if (!processingResult) {
-          decrementRateLimit(ip);
-          return res.status(504).json({
-            error: "Processing timeout",
-            message: "Processing is taking longer than expected. Your upload count has not been affected."
-          });
-        }
-
-        // Success! 
-        incrementRateLimit(ip);
-        const newRateCheck = checkRateLimit(ip);
-        
-        console.log(`Processing complete for ${ip}. ${newRateCheck.remaining} uploads remaining today.`);
-
+        // Return immediately - client will poll for status
         return res.status(200).json({
-          ok: true,
-          id: uploadId,
-          stem_removed: stem,
-          back_track_url: processingResult.back_track,
-          stem_track_url: processingResult.stem_track,
-          message: `${stem === 'voice' ? 'Vocals' : stem} removed successfully`,
-          remaining_uploads: newRateCheck.remaining
+          processing: true,
+          message: "Processing started. Use check_status to monitor progress.",
+          uploadId: uploadId
         });
 
       } catch (processError) {
         console.error("Processing error:", processError);
         decrementRateLimit(ip);
+        processingStatus.delete(uploadId);
         return res.status(500).json({
           error: "Processing failed",
           message: "An error occurred during processing. Your upload count has not been affected."
+        });
+      }
+
+    } else if (action === 'check_status') {
+      if (!uploadId) {
+        return res.status(400).json({ error: "Upload ID required" });
+      }
+
+      const statusInfo = processingStatus.get(uploadId);
+      if (!statusInfo) {
+        return res.status(404).json({
+          error: "Upload not found",
+          message: "This upload ID was not found or has expired."
+        });
+      }
+
+      try {
+        // Check processing status with shorter timeout
+        const checkResponse = await fetchWithRetry("https://www.lalal.ai/api/check/", {
+          method: "POST",
+          headers: {
+            Authorization: `license ${license}`,
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: new URLSearchParams({ id: uploadId }),
+        }, 2, 15000); // 15s timeout, 2 retries
+
+        const checkResult = await checkResponse.json().catch(() => ({}));
+        const taskInfo = checkResult?.result?.[uploadId];
+        const taskState = taskInfo?.task?.state;
+
+        if (taskState === "success") {
+          const processingResult = taskInfo.split;
+          
+          // Success! Clean up and return result
+          incrementRateLimit(statusInfo.ip);
+          processingStatus.delete(uploadId);
+          
+          const newRateCheck = checkRateLimit(statusInfo.ip);
+          
+          console.log(`Processing complete for ${statusInfo.ip}. ${newRateCheck.remaining} uploads remaining today.`);
+
+          return res.status(200).json({
+            ok: true,
+            id: uploadId,
+            stem_removed: statusInfo.stem,
+            back_track_url: processingResult.back_track,
+            stem_track_url: processingResult.stem_track,
+            message: `${statusInfo.stem === 'voice' ? 'Vocals' : statusInfo.stem} removed successfully`,
+            remaining_uploads: newRateCheck.remaining
+          });
+        } else if (taskState === "error" || taskState === "cancelled") {
+          console.error("Processing failed:", taskInfo?.task?.error);
+          decrementRateLimit(statusInfo.ip);
+          processingStatus.delete(uploadId);
+          return res.status(502).json({
+            error: "Processing failed",
+            message: "Audio processing encountered an error. Your upload count has not been affected."
+          });
+        } else {
+          // Still processing
+          return res.status(200).json({
+            processing: true,
+            status: taskState || 'processing',
+            message: "Still processing your audio..."
+          });
+        }
+
+      } catch (error) {
+        console.error("Status check error:", error);
+        return res.status(500).json({
+          error: "Status check failed",
+          message: "Unable to check processing status. Please try again."
         });
       }
 
