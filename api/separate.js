@@ -49,6 +49,7 @@ export default async function handler(req, res) {
   let body = "";
   req.on("data", chunk => { body += chunk.toString(); });
   await new Promise(resolve => req.on("end", resolve));
+
   let parsed;
   try {
     parsed = JSON.parse(body);
@@ -70,7 +71,7 @@ export default async function handler(req, res) {
     });
   }
 
-  // ---------- Process (mark tracking) ----------
+  // ---------- Process (just track state) ----------
   if (action === "process") {
     processingStatus.set(uploadId, { stem, ip, timestamp: Date.now() });
     return res.status(200).json({ started: true });
