@@ -1,461 +1,424 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MuteOne - AI Audio Separation</title>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%23667eea'/%3E%3Ctext x='50' y='60' font-family='Arial,sans-serif' font-size='40' font-weight='bold' text-anchor='middle' fill='white'%3EM%3C/text%3E%3C/svg%3E">
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+// api/separate.js - Proxy approach for LALAL.AI
+import fetch from "node-fetch";
+import formidable from "formidable";
+import fs from "fs";
+
+export const config = { 
+  api: { 
+    bodyParser: false // Let formidable handle multipart parsing
+  } 
+};
+
+// Simple in-memory rate limiting with cleanup
+const DAILY_LIMIT = 3;
+const MAX_DURATION_SECONDS = 300; // 5 minutes
+
+// Load whitelisted IPs from environment variables
+const getWhitelistedIPs = () => {
+  const whitelist = process.env.WHITELISTED_IPS || '';
+  return new Set(
+    whitelist
+      .split(',')
+      .map(ip => ip.trim())
+      .filter(ip => ip.length > 0)
+  );
+};
+
+const WHITELISTED_IPS = getWhitelistedIPs();
+const dailyUploads = new Map();
+const processingStatus = new Map();
+
+// Clean up old entries to prevent memory leaks
+function cleanupOldEntries() {
+  const today = new Date().toDateString();
+  for (const [ip, data] of dailyUploads.entries()) {
+    if (data.date !== today) {
+      dailyUploads.delete(ip);
+    }
+  }
+  
+  const tenMinutesAgo = Date.now() - (10 * 60 * 1000);
+  for (const [uploadId, status] of processingStatus.entries()) {
+    if (status.timestamp < tenMinutesAgo) {
+      processingStatus.delete(uploadId);
+    }
+  }
+}
+
+// Run cleanup periodically
+setInterval(cleanupOldEntries, 60 * 60 * 1000);
+
+function getClientIP(req) {
+  return (
+    req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
+    req.headers["x-real-ip"] ||
+    req.socket?.remoteAddress ||
+    "127.0.0.1"
+  );
+}
+
+function checkRateLimit(ip) {
+  if (WHITELISTED_IPS.has(ip)) {
+    return { 
+      allowed: true, 
+      remaining: DAILY_LIMIT,
+      whitelisted: true 
+    };
+  }
+
+  const today = new Date().toDateString();
+  const data = dailyUploads.get(ip);
+  if (!data || data.date !== today) {
+    dailyUploads.set(ip, { count: 0, date: today, processing: false });
+    return { allowed: true, remaining: DAILY_LIMIT };
+  }
+  
+  if (data.processing) {
+    return { allowed: false, remaining: Math.max(0, DAILY_LIMIT - data.count), error: "Already processing a file" };
+  }
+  
+  return { 
+    allowed: data.count < DAILY_LIMIT, 
+    remaining: Math.max(0, DAILY_LIMIT - data.count)
+  };
+}
+
+function setProcessing(ip, processing) {
+  if (WHITELISTED_IPS.has(ip)) return;
+  
+  const today = new Date().toDateString();
+  const data = dailyUploads.get(ip) || { count: 0, date: today };
+  data.processing = processing;
+  dailyUploads.set(ip, data);
+}
+
+function incrementRateLimit(ip) {
+  if (WHITELISTED_IPS.has(ip)) return;
+  
+  const today = new Date().toDateString();
+  const data = dailyUploads.get(ip) || { count: 0, date: today, processing: false };
+  data.count += 1;
+  data.processing = false;
+  dailyUploads.set(ip, data);
+}
+
+function decrementRateLimit(ip) {
+  if (WHITELISTED_IPS.has(ip)) return;
+  
+  const data = dailyUploads.get(ip);
+  if (data) {
+    data.count = Math.max(0, data.count - 1);
+    data.processing = false;
+    dailyUploads.set(ip, data);
+  }
+}
+
+const ALLOWED_STEMS = new Set([
+  "voice", "drum", "bass", "piano", "electric_guitar", 
+  "acoustic_guitar", "synthesizer", "strings", "wind",
+]);
+
+// Parse form data helper
+function parseForm(req) {
+  return new Promise((resolve, reject) => {
+    const form = new formidable.IncomingForm({
+      maxFileSize: 80 * 1024 * 1024, // 80MB limit
+    });
+    
+    form.parse(req, (err, fields, files) => {
+      if (err) {
+        reject(err);
+      } else {
+        // Handle both single values and arrays from formidable
+        const normalizedFields = {};
+        for (const [key, value] of Object.entries(fields)) {
+          normalizedFields[key] = Array.isArray(value) ? value[0] : value;
         }
         
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
+        const normalizedFiles = {};
+        for (const [key, value] of Object.entries(files)) {
+          normalizedFiles[key] = Array.isArray(value) ? value[0] : value;
         }
         
-        .container {
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            padding: 40px;
-            max-width: 600px;
-            width: 100%;
+        resolve({ fields: normalizedFields, files: normalizedFiles });
+      }
+    });
+  });
+}
+
+export default async function handler(req, res) {
+  // CORS headers
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
+  
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+  
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  const ip = getClientIP(req);
+  const license = process.env.LALAL_API_KEY;
+  
+  if (!license) {
+    return res.status(500).json({ error: "Server configuration error" });
+  }
+
+  cleanupOldEntries();
+
+  try {
+    // Check if this is a file upload (multipart) or JSON request
+    const contentType = req.headers['content-type'] || '';
+    
+    if (contentType.includes('multipart/form-data')) {
+      // Handle file upload
+      const { fields, files } = await parseForm(req);
+      const action = fields.action;
+      const stem = fields.stem;
+      const audioFile = files.audio_file;
+
+      if (action !== 'upload_file') {
+        return res.status(400).json({ error: "Invalid action for file upload" });
+      }
+
+      if (!ALLOWED_STEMS.has(stem)) {
+        return res.status(400).json({
+          error: "Invalid stem",
+          message: "Choose one of: " + [...ALLOWED_STEMS].join(", "),
+        });
+      }
+
+      if (!audioFile) {
+        return res.status(400).json({ error: "No audio file provided" });
+      }
+
+      // Check rate limit
+      const rateCheck = checkRateLimit(ip);
+      if (!rateCheck.allowed) {
+        if (rateCheck.error) {
+          return res.status(429).json({
+            error: "Processing in progress",
+            message: rateCheck.error,
+            remaining: rateCheck.remaining
+          });
         }
-        
-        .header {
-            text-align: center;
-            margin-bottom: 40px;
-        }
-        
-        .logo {
-            font-size: 32px;
-            font-weight: 800;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 10px;
-        }
-        
-        .tagline {
-            color: #666;
-            font-size: 16px;
-        }
-        
-        .upload-area {
-            border: 3px dashed #ddd;
-            border-radius: 15px;
-            padding: 40px;
-            text-align: center;
-            margin-bottom: 30px;
-            transition: all 0.3s ease;
-            cursor: pointer;
-        }
-        
-        .upload-area:hover {
-            border-color: #667eea;
-            background: #f8f9ff;
-        }
-        
-        .upload-area.dragover {
-            border-color: #667eea;
-            background: #f0f4ff;
-        }
-        
-        .upload-icon {
-            font-size: 48px;
-            color: #ddd;
-            margin-bottom: 20px;
-        }
-        
-        .upload-text {
-            color: #666;
-            font-size: 16px;
-            margin-bottom: 10px;
-        }
-        
-        .upload-subtext {
-            color: #999;
-            font-size: 14px;
-        }
-        
-        .file-input {
-            display: none;
-        }
-        
-        .instrument-selector {
-            margin-bottom: 30px;
-        }
-        
-        .section-title {
-            font-size: 18px;
-            font-weight: 600;
-            margin-bottom: 15px;
-            color: #333;
-        }
-        
-        .instrument-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 15px;
-        }
-        
-        .instrument-option {
-            padding: 15px;
-            border: 2px solid #eee;
-            border-radius: 10px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            background: white;
-        }
-        
-        .instrument-option:hover {
-            border-color: #667eea;
-            transform: translateY(-2px);
-        }
-        
-        .instrument-option.selected {
-            border-color: #667eea;
-            background: #f0f4ff;
-            color: #667eea;
-        }
-        
-        .instrument-icon {
-            font-size: 24px;
-            margin-bottom: 8px;
-        }
-        
-        .pricing-info {
-            background: #f8f9ff;
-            border: 1px solid #e0e7ff;
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 30px;
-            text-align: center;
-        }
-        
-        .price {
-            font-size: 24px;
-            font-weight: 700;
-            color: #10b981;
-            margin-bottom: 5px;
-        }
-        
-        .price-description {
-            color: #666;
-            font-size: 14px;
-        }
-        
-        .usage-info {
-            margin-top: 10px;
-            padding: 10px;
-            background: rgba(102, 126, 234, 0.1);
-            border-radius: 6px;
-            font-size: 13px;
-            color: #4c51bf;
-        }
-        
-        .process-btn {
-            width: 100%;
-            padding: 15px;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin-bottom: 20px;
-        }
-        
-        .process-btn:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
-        }
-        
-        .process-btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
-        
-        .progress {
-            display: none;
-            margin-bottom: 20px;
-        }
-        
-        .progress-bar {
-            width: 100%;
-            height: 8px;
-            background: #eee;
-            border-radius: 4px;
-            overflow: hidden;
-        }
-        
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            transition: width 0.3s ease;
-            width: 0%;
-        }
-        
-        .progress-text {
-            text-align: center;
-            margin-top: 10px;
-            color: #666;
-            font-size: 14px;
-        }
-        
-        .result {
-            display: none;
-            text-align: center;
-            padding: 20px;
-            background: #f0f9ff;
-            border: 1px solid #e0f2fe;
-            border-radius: 10px;
-        }
-        
-        .download-btn {
-            padding: 12px 24px;
-            background: #10b981;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-weight: 600;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-block;
-            transition: all 0.3s ease;
-        }
-        
-        .download-btn:hover {
-            background: #059669;
-            transform: translateY(-1px);
-        }
-        
-        .file-info {
-            display: none;
-            background: #f8f9ff;
-            border: 1px solid #e0e7ff;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 20px;
-        }
-        
-        .file-name {
-            font-weight: 600;
-            color: #333;
-            margin-bottom: 5px;
-        }
-        
-        .file-details {
-            color: #666;
-            font-size: 14px;
-        }
-        
-        .duration-info {
-            margin-top: 8px;
-            padding: 8px 12px;
-            background: rgba(16, 185, 129, 0.1);
-            border: 1px solid rgba(16, 185, 129, 0.3);
-            border-radius: 6px;
-            color: #059669;
-            font-size: 13px;
-            font-weight: 500;
-        }
-        
-        .duration-warning {
-            background: rgba(245, 158, 11, 0.1);
-            border-color: rgba(245, 158, 11, 0.3);
-            color: #d97706;
-        }
-        
-        .duration-error {
-            background: rgba(239, 68, 68, 0.1);
-            border-color: rgba(239, 68, 68, 0.3);
-            color: #dc2626;
-        }
-        
-        .error {
-            display: none;
-            background: #fef2f2;
-            border: 1px solid #fecaca;
-            color: #dc2626;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
+        return res.status(429).json({
+          error: "Daily limit exceeded",
+          message: `You have reached your daily limit of ${DAILY_LIMIT} uploads. Try again tomorrow!`,
+          remaining: 0
+        });
+      }
+
+      // File size validation
+      if (audioFile.size > 80 * 1024 * 1024) {
+        return res.status(413).json({
+          error: "File too large",
+          message: "File must be under 80MB."
+        });
+      }
+
+      setProcessing(ip, true);
+
+      try {
+        // Create FormData for LALAL.AI
+        const FormData = (await import('form-data')).default;
+        const formData = new FormData();
+        formData.append('audio_file', fs.createReadStream(audioFile.filepath), {
+          filename: audioFile.originalFilename,
+          contentType: audioFile.mimetype
+        });
+
+        console.log(`${ip} uploading ${audioFile.originalFilename} (${audioFile.size} bytes) - ${stem}`);
+
+        // Upload to LALAL.AI
+        const uploadResponse = await fetch("https://www.lalal.ai/api/upload/", {
+          method: "POST",
+          headers: {
+            "Authorization": `license ${license}`,
+            ...formData.getHeaders()
+          },
+          body: formData,
+        });
+
+        const uploadResult = await uploadResponse.json();
+
+        if (!uploadResponse.ok || uploadResult.status !== 'success') {
+          console.error("LALAL.AI upload failed:", uploadResult);
+          decrementRateLimit(ip);
+          return res.status(502).json({
+            error: "Upload failed",
+            message: uploadResult.error || "Failed to upload to processing service"
+          });
         }
 
-        .network-status {
-            font-size: 12px;
-            color: #666;
-            text-align: center;
-            margin-top: 10px;
+        const uploadId = uploadResult.id;
+
+        // Start processing
+        const params = JSON.stringify([{ 
+          id: uploadId, 
+          stem: stem
+        }]);
+        
+        const splitResponse = await fetch("https://www.lalal.ai/api/split/", {
+          method: "POST",
+          headers: {
+            Authorization: `license ${license}`,
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: new URLSearchParams({ params }),
+        });
+
+        const splitResult = await splitResponse.json();
+        
+        if (splitResult?.status !== "success") {
+          console.error("Split request failed:", splitResult);
+          decrementRateLimit(ip);
+          return res.status(502).json({
+            error: "Processing initialization failed",
+            message: "Unable to start audio processing"
+          });
         }
 
-        .network-warning {
-            background: rgba(245, 158, 11, 0.1);
-            border: 1px solid rgba(245, 158, 11, 0.3);
-            color: #d97706;
-            padding: 10px;
-            border-radius: 6px;
-            font-size: 13px;
-            margin-bottom: 15px;
+        // Store processing status
+        processingStatus.set(uploadId, {
+          status: 'processing',
+          stem: stem,
+          ip: ip,
+          timestamp: Date.now()
+        });
+
+        console.log(`${ip} processing started for ${uploadId} - ${stem}`);
+
+        return res.status(200).json({
+          success: true,
+          uploadId: uploadId,
+          message: "Upload and processing started successfully"
+        });
+
+      } catch (error) {
+        console.error("Processing error:", error);
+        decrementRateLimit(ip);
+        return res.status(500).json({
+          error: "Processing failed",
+          message: "An error occurred during processing"
+        });
+      } finally {
+        // Clean up temp file
+        if (audioFile && audioFile.filepath) {
+          try {
+            fs.unlinkSync(audioFile.filepath);
+          } catch (e) {
+            console.warn("Failed to clean up temp file:", e);
+          }
         }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <div class="logo">MuteOne™</div>
-            <div class="tagline">Remove one instrument, keep the rest!</div>
-        </div>
-        
-        <div class="upload-area" id="uploadArea">
-            <div class="upload-icon">🎵</div>
-            <div class="upload-text">Drop your audio file here or click to browse</div>
-            <div class="upload-subtext">MP3, WAV, FLAC, M4A • Max 5 minutes • Under 80MB</div>
-            <input type="file" class="file-input" id="fileInput" accept=".mp3,.wav,.m4a,.flac">
-        </div>
-        
-        <div class="file-info" id="fileInfo">
-            <div class="file-name" id="fileName"></div>
-            <div class="file-details" id="fileDetails"></div>
-            <div class="duration-info" id="durationInfo"></div>
-        </div>
-        
-        <div class="error" id="errorMessage"></div>
-        <div class="network-warning" id="networkWarning" style="display: none;"></div>
-        
-        <div class="instrument-selector">
-            <div class="section-title">Choose what to remove:</div>
-            <div class="instrument-grid">
-                <div class="instrument-option selected" data-instrument="voice">
-                    <div class="instrument-icon">🎤</div>
-                    <div>Vocals</div>
-                </div>
-                <div class="instrument-option" data-instrument="drum">
-                    <div class="instrument-icon">🥁</div>
-                    <div>Drums</div>
-                </div>
-                <div class="instrument-option" data-instrument="bass">
-                    <div class="instrument-icon">🎸</div>
-                    <div>Bass</div>
-                </div>
-                <div class="instrument-option" data-instrument="piano">
-                    <div class="instrument-icon">🎹</div>
-                    <div>Piano</div>
-                </div>
-                <div class="instrument-option" data-instrument="electric_guitar">
-                    <div class="instrument-icon">🎸</div>
-                    <div>Guitar</div>
-                </div>
-                <div class="instrument-option" data-instrument="strings">
-                    <div class="instrument-icon">🎻</div>
-                    <div>Strings</div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="pricing-info">
-            <div class="price">FREE</div>
-            <div class="price-description">
-                High quality audio separation • 5 minute limit
-            </div>
-            <div class="usage-info" id="usageInfo">
-                Loading usage info...
-            </div>
-        </div>
-        
-        <button class="process-btn" id="processBtn" disabled>
-            Upload a file to get started
-        </button>
-        
-        <div class="progress" id="progress">
-            <div class="progress-bar">
-                <div class="progress-fill" id="progressFill"></div>
-            </div>
-            <div class="progress-text" id="progressText">Processing your audio...</div>
-            <div class="network-status" id="networkStatus"></div>
-        </div>
-        
-        <div class="result" id="result">
-            <div style="margin-bottom: 20px;">
-                <div style="font-size: 20px; font-weight: 600; color: #10b981; margin-bottom: 8px;">
-                    🎉 Success!
-                </div>
-                <div style="color: #666; font-size: 15px; margin-bottom: 15px;" id="resultDescription">
-                    Vocals removed successfully
-                </div>
-            </div>
-            <div style="text-align: center;">
-                <a href="#" class="download-btn" id="downloadBtn" download>
-                    Download Your Result
-                </a>
-                <div style="margin-top: 12px; font-size: 13px; color: #666;" id="remainingInfo">
-                </div>
-            </div>
-        </div>
-        
-        <footer style="text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; color: #666; font-size: 12px;">
-            <div>© 2025 MuteOne™. All rights reserved.</div>
-        </footer>
-    </div>
+      }
 
-    <script>
-        // Global variables
-        let selectedFile = null;
-        let selectedInstrument = 'voice';
-        let audioDuration = 0;
-        let remainingUploads = 3;
-        let currentUploadId = null;
-        let pollingInterval = null;
-        let isProcessing = false;
-        
-        // Network detection
-        let networkType = 'unknown';
-        let isSlowConnection = false;
-        
-        // DOM elements
-        const uploadArea = document.getElementById('uploadArea');
-        const fileInput = document.getElementById('fileInput');
-        const fileInfo = document.getElementById('fileInfo');
-        const fileName = document.getElementById('fileName');
-        const fileDetails = document.getElementById('fileDetails');
-        const durationInfo = document.getElementById('durationInfo');
-        const processBtn = document.getElementById('processBtn');
-        const progress = document.getElementById('progress');
-        const progressFill = document.getElementById('progressFill');
-        const progressText = document.getElementById('progressText');
-        const networkStatus = document.getElementById('networkStatus');
-        const result = document.getElementById('result');
-        const downloadBtn = document.getElementById('downloadBtn');
-        const resultDescription = document.getElementById('resultDescription');
-        const errorMessage = document.getElementById('errorMessage');
-        const usageInfo = document.getElementById('usageInfo');
-        const remainingInfo = document.getElementById('remainingInfo');
-        const networkWarning = document.getElementById('networkWarning');
-        
-        // Initialize
-        detectConnection();
-        checkUsageLimit();
+    } else {
+      // Handle JSON requests (status check, limit check)
+      let body = '';
+      req.on('data', chunk => {
+        body += chunk.toString();
+      });
+      
+      await new Promise(resolve => {
+        req.on('end', resolve);
+      });
 
-        // Network detection
-        function detectConnection() {
-            if ('connection' in navigator) {
-                const connection = navigator.connection;
-                networkType = connection.effectiveType || connection.type || 'unknown';
-                isSlowConnection = ['slow-2g', '2g'].includes(networkType);
-                
-                if (isSlowConnection) {
-                    showNetworkWarning('Slow connection detected. Processing may take longer than usual.');
+      const { action, uploadId } = JSON.parse(body);
+
+      if (action === 'check_status') {
+        if (!uploadId) {
+          return res.status(400).json({ error: "Upload ID required" });
+        }
+
+        const statusInfo = processingStatus.get(uploadId);
+        if (!statusInfo) {
+          return res.status(404).json({
+            error: "Upload not found",
+            message: "This upload ID was not found or has expired."
+          });
+        }
+
+        try {
+          const checkResponse = await fetch("https://www.lalal.ai/api/check/", {
+            method: "POST",
+            headers: {
+              Authorization: `license ${license}`,
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: new URLSearchParams({ id: uploadId }),
+          });
+
+          const checkResult = await checkResponse.json();
+          const taskInfo = checkResult?.result?.[uploadId];
+          const taskState = taskInfo?.task?.state;
+
+          if (taskState === "success") {
+            const processingResult = taskInfo.split;
+            
+            incrementRateLimit(statusInfo.ip);
+            processingStatus.delete(uploadId);
+            
+            const newRateCheck = checkRateLimit(statusInfo.ip);
+            
+            console.log(`Processing complete for ${statusInfo.ip}. ${newRateCheck.remaining} uploads remaining.`);
+
+            return res.status(200).json({
+              ok: true,
+              id: uploadId,
+              stem_removed: statusInfo.stem,
+              back_track_url: processingResult.back_track,
+              stem_track_url: processingResult.stem_track,
+              message: `${statusInfo.stem === 'voice' ? 'Vocals' : statusInfo.stem} removed successfully`,
+              remaining_uploads: newRateCheck.remaining
+            });
+          } else if (taskState === "error" || taskState === "cancelled") {
+            console.error("Processing failed:", taskInfo?.task?.error);
+            decrementRateLimit(statusInfo.ip);
+            processingStatus.delete(uploadId);
+            return res.status(502).json({
+              error: "Processing failed",
+              message: "Audio processing encountered an error"
+            });
+          } else {
+            return res.status(200).json({
+              processing: true,
+              status: taskState || 'processing',
+              message: "Still processing your audio..."
+            });
+          }
+
+        } catch (error) {
+          console.error("Status check error:", error);
+          return res.status(500).json({
+            error: "Status check failed",
+            message: "Unable to check processing status"
+          });
+        }
+
+      } else if (action === 'check_limit') {
+        const rateCheck = checkRateLimit(ip);
+        return res.status(200).json({
+          remaining: rateCheck.remaining,
+          limit: DAILY_LIMIT,
+          can_upload: rateCheck.allowed && !rateCheck.error
+        });
+        
+      } else {
+        return res.status(400).json({ error: "Invalid action specified" });
+      }
+    }
+
+  } catch (error) {
+    console.error("API error:", error);
+    setProcessing(ip, false);
+    
+    return res.status(500).json({
+      error: "Server error",
+      message: "An unexpected error occurred"
+    });
+  }
+}
