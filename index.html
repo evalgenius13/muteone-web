@@ -6,12 +6,7 @@
     <title>MuteOne - AI Audio Separation</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%23667eea'/%3E%3Ctext x='50' y='60' font-family='Arial,sans-serif' font-size='40' font-weight='bold' text-anchor='middle' fill='white'%3EM%3C/text%3E%3C/svg%3E">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -21,7 +16,6 @@
             align-items: center;
             padding: 20px;
         }
-        
         .container {
             background: white;
             border-radius: 20px;
@@ -30,26 +24,15 @@
             max-width: 600px;
             width: 100%;
         }
-        
-        .header {
-            text-align: center;
-            margin-bottom: 40px;
-        }
-        
+        .header { text-align: center; margin-bottom: 40px; }
         .logo {
-            font-size: 32px;
-            font-weight: 800;
+            font-size: 32px; font-weight: 800;
             background: linear-gradient(135deg, #667eea, #764ba2);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             margin-bottom: 10px;
         }
-        
-        .tagline {
-            color: #666;
-            font-size: 16px;
-        }
-        
+        .tagline { color: #666; font-size: 16px; }
         .upload-area {
             border: 3px dashed #ddd;
             border-radius: 15px;
@@ -59,250 +42,81 @@
             transition: all 0.3s ease;
             cursor: pointer;
         }
-        
-        .upload-area:hover {
-            border-color: #667eea;
-            background: #f8f9ff;
-        }
-        
-        .upload-area.dragover {
-            border-color: #667eea;
-            background: #f0f4ff;
-        }
-        
-        .upload-icon {
-            font-size: 48px;
-            color: #ddd;
-            margin-bottom: 20px;
-        }
-        
-        .upload-text {
-            color: #666;
-            font-size: 16px;
-            margin-bottom: 10px;
-        }
-        
-        .upload-subtext {
-            color: #999;
-            font-size: 14px;
-        }
-        
-        .file-input {
-            display: none;
-        }
-        
-        .instrument-selector {
-            margin-bottom: 30px;
-        }
-        
-        .section-title {
-            font-size: 18px;
-            font-weight: 600;
-            margin-bottom: 15px;
-            color: #333;
-        }
-        
-        .instrument-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 15px;
-        }
-        
+        .upload-area:hover { border-color: #667eea; background: #f8f9ff; }
+        .upload-area.dragover { border-color: #667eea; background: #f0f4ff; }
+        .upload-icon { font-size: 48px; color: #ddd; margin-bottom: 20px; }
+        .upload-text { color: #666; font-size: 16px; margin-bottom: 10px; }
+        .upload-subtext { color: #999; font-size: 14px; }
+        .file-input { display: none; }
+        .instrument-selector { margin-bottom: 30px; }
+        .section-title { font-size: 18px; font-weight: 600; margin-bottom: 15px; color: #333; }
+        .instrument-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 15px; }
         .instrument-option {
-            padding: 15px;
-            border: 2px solid #eee;
-            border-radius: 10px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            background: white;
+            padding: 15px; border: 2px solid #eee; border-radius: 10px; text-align: center;
+            cursor: pointer; transition: all 0.3s ease; background: white;
         }
-        
-        .instrument-option:hover {
-            border-color: #667eea;
-            transform: translateY(-2px);
-        }
-        
-        .instrument-option.selected {
-            border-color: #667eea;
-            background: #f0f4ff;
-            color: #667eea;
-        }
-        
-        .instrument-icon {
-            font-size: 24px;
-            margin-bottom: 8px;
-        }
-        
+        .instrument-option:hover { border-color: #667eea; transform: translateY(-2px); }
+        .instrument-option.selected { border-color: #667eea; background: #f0f4ff; color: #667eea; }
+        .instrument-icon { font-size: 24px; margin-bottom: 8px; }
         .pricing-info {
-            background: #f8f9ff;
-            border: 1px solid #e0e7ff;
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 30px;
-            text-align: center;
+            background: #f8f9ff; border: 1px solid #e0e7ff; border-radius: 10px;
+            padding: 20px; margin-bottom: 30px; text-align: center;
         }
-        
-        .price {
-            font-size: 24px;
-            font-weight: 700;
-            color: #10b981;
-            margin-bottom: 5px;
-        }
-        
-        .price-description {
-            color: #666;
-            font-size: 14px;
-        }
-        
+        .price { font-size: 24px; font-weight: 700; color: #10b981; margin-bottom: 5px; }
+        .price-description { color: #666; font-size: 14px; }
         .usage-info {
-            margin-top: 10px;
-            padding: 10px;
-            background: rgba(102, 126, 234, 0.1);
-            border-radius: 6px;
-            font-size: 13px;
-            color: #4c51bf;
+            margin-top: 10px; padding: 10px; background: rgba(102, 126, 234, 0.1);
+            border-radius: 6px; font-size: 13px; color: #4c51bf;
         }
-        
         .process-btn {
-            width: 100%;
-            padding: 15px;
+            width: 100%; padding: 15px;
             background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin-bottom: 20px;
+            color: white; border: none; border-radius: 10px;
+            font-size: 16px; font-weight: 600; cursor: pointer;
+            transition: all 0.3s ease; margin-bottom: 20px;
         }
-        
         .process-btn:hover:not(:disabled) {
             transform: translateY(-2px);
             box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
         }
-        
-        .process-btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
-        
-        .progress {
-            display: none;
-            margin-bottom: 20px;
-        }
-        
-        .progress-bar {
-            width: 100%;
-            height: 8px;
-            background: #eee;
-            border-radius: 4px;
-            overflow: hidden;
-        }
-        
+        .process-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+        .progress { display: none; margin-bottom: 20px; }
+        .progress-bar { width: 100%; height: 8px; background: #eee; border-radius: 4px; overflow: hidden; }
         .progress-fill {
             height: 100%;
             background: linear-gradient(135deg, #667eea, #764ba2);
             transition: width 0.3s ease;
             width: 0%;
         }
-        
-        .progress-text {
-            text-align: center;
-            margin-top: 10px;
-            color: #666;
-            font-size: 14px;
-        }
-        
+        .progress-text { text-align: center; margin-top: 10px; color: #666; font-size: 14px; }
         .result {
-            display: none;
-            text-align: center;
-            padding: 20px;
-            background: #f0f9ff;
-            border: 1px solid #e0f2fe;
-            border-radius: 10px;
+            display: none; text-align: center; padding: 20px;
+            background: #f0f9ff; border: 1px solid #e0f2fe; border-radius: 10px;
         }
-        
         .download-btn {
-            padding: 12px 24px;
-            background: #10b981;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-weight: 600;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-block;
-            transition: all 0.3s ease;
+            padding: 12px 24px; background: #10b981; color: white; border: none;
+            border-radius: 8px; font-weight: 600; cursor: pointer;
+            text-decoration: none; display: inline-block; transition: all 0.3s ease;
         }
-        
-        .download-btn:hover {
-            background: #059669;
-            transform: translateY(-1px);
-        }
-        
+        .download-btn:hover { background: #059669; transform: translateY(-1px); }
         .file-info {
-            display: none;
-            background: #f8f9ff;
-            border: 1px solid #e0e7ff;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 20px;
+            display: none; background: #f8f9ff; border: 1px solid #e0e7ff;
+            border-radius: 8px; padding: 15px; margin-bottom: 20px;
         }
-        
-        .file-name {
-            font-weight: 600;
-            color: #333;
-            margin-bottom: 5px;
-        }
-        
-        .file-details {
-            color: #666;
-            font-size: 14px;
-        }
-        
+        .file-name { font-weight: 600; color: #333; margin-bottom: 5px; }
+        .file-details { color: #666; font-size: 14px; }
         .duration-info {
-            margin-top: 8px;
-            padding: 8px 12px;
-            background: rgba(16, 185, 129, 0.1);
-            border: 1px solid rgba(16, 185, 129, 0.3);
-            border-radius: 6px;
-            color: #059669;
-            font-size: 13px;
-            font-weight: 500;
+            margin-top: 8px; padding: 8px 12px;
+            background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3);
+            border-radius: 6px; color: #059669; font-size: 13px; font-weight: 500;
         }
-        
-        .duration-warning {
-            background: rgba(245, 158, 11, 0.1);
-            border-color: rgba(245, 158, 11, 0.3);
-            color: #d97706;
-        }
-        
-        .duration-error {
-            background: rgba(239, 68, 68, 0.1);
-            border-color: rgba(239, 68, 68, 0.3);
-            color: #dc2626;
-        }
-        
+        .duration-warning { background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.3); color: #d97706; }
+        .duration-error { background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3); color: #dc2626; }
         .error {
-            display: none;
-            background: #fef2f2;
-            border: 1px solid #fecaca;
-            color: #dc2626;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
+            display: none; background: #fef2f2; border: 1px solid #fecaca;
+            color: #dc2626; padding: 15px; border-radius: 8px; margin-bottom: 20px;
         }
-
-        .network-status {
-            font-size: 12px;
-            color: #666;
-            text-align: center;
-            margin-top: 10px;
-        }
-
+        .network-status { font-size: 12px; color: #666; text-align: center; margin-top: 10px; }
         .network-warning {
             background: rgba(245, 158, 11, 0.1);
             border: 1px solid rgba(245, 158, 11, 0.3);
@@ -320,113 +134,74 @@
             <div class="logo">MuteOne™</div>
             <div class="tagline">Remove one instrument, keep the rest!</div>
         </div>
-        
+
         <div class="upload-area" id="uploadArea">
             <div class="upload-icon">🎵</div>
             <div class="upload-text">Drop your audio file here or click to browse</div>
             <div class="upload-subtext">MP3, WAV, FLAC, M4A • Max 5 minutes • Under 80MB</div>
             <input type="file" class="file-input" id="fileInput" accept=".mp3,.wav,.m4a,.flac">
         </div>
-        
+
         <div class="file-info" id="fileInfo">
             <div class="file-name" id="fileName"></div>
             <div class="file-details" id="fileDetails"></div>
             <div class="duration-info" id="durationInfo"></div>
         </div>
-        
+
         <div class="error" id="errorMessage"></div>
-        <div class="network-warning" id="networkWarning" style="display: none;"></div>
-        
+        <div class="network-warning" id="networkWarning" style="display:none;"></div>
+
         <div class="instrument-selector">
             <div class="section-title">Choose what to remove:</div>
             <div class="instrument-grid">
-                <div class="instrument-option selected" data-instrument="voice">
-                    <div class="instrument-icon">🎤</div>
-                    <div>Vocals</div>
-                </div>
-                <div class="instrument-option" data-instrument="drum">
-                    <div class="instrument-icon">🥁</div>
-                    <div>Drums</div>
-                </div>
-                <div class="instrument-option" data-instrument="bass">
-                    <div class="instrument-icon">🎸</div>
-                    <div>Bass</div>
-                </div>
-                <div class="instrument-option" data-instrument="piano">
-                    <div class="instrument-icon">🎹</div>
-                    <div>Piano</div>
-                </div>
-                <div class="instrument-option" data-instrument="electric_guitar">
-                    <div class="instrument-icon">🎸</div>
-                    <div>Guitar</div>
-                </div>
-                <div class="instrument-option" data-instrument="strings">
-                    <div class="instrument-icon">🎻</div>
-                    <div>Strings</div>
-                </div>
+                <div class="instrument-option selected" data-instrument="voice"><div class="instrument-icon">🎤</div><div>Vocals</div></div>
+                <div class="instrument-option" data-instrument="drum"><div class="instrument-icon">🥁</div><div>Drums</div></div>
+                <div class="instrument-option" data-instrument="bass"><div class="instrument-icon">🎸</div><div>Bass</div></div>
+                <div class="instrument-option" data-instrument="piano"><div class="instrument-icon">🎹</div><div>Piano</div></div>
+                <div class="instrument-option" data-instrument="electric_guitar"><div class="instrument-icon">🎸</div><div>Guitar</div></div>
+                <div class="instrument-option" data-instrument="strings"><div class="instrument-icon">🎻</div><div>Strings</div></div>
             </div>
         </div>
-        
+
         <div class="pricing-info">
             <div class="price">FREE</div>
-            <div class="price-description">
-                High quality audio separation • 5 minute limit
-            </div>
-            <div class="usage-info" id="usageInfo">
-                Loading usage info...
-            </div>
+            <div class="price-description">High quality audio separation • 5 minute limit</div>
+            <div class="usage-info" id="usageInfo">Loading usage info...</div>
         </div>
-        
-        <button class="process-btn" id="processBtn" disabled>
-            Upload a file to get started
-        </button>
-        
+
+        <button class="process-btn" id="processBtn" disabled>Upload a file to get started</button>
+
         <div class="progress" id="progress">
-            <div class="progress-bar">
-                <div class="progress-fill" id="progressFill"></div>
-            </div>
+            <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
             <div class="progress-text" id="progressText">Processing your audio...</div>
             <div class="network-status" id="networkStatus"></div>
         </div>
-        
+
         <div class="result" id="result">
             <div style="margin-bottom: 20px;">
-                <div style="font-size: 20px; font-weight: 600; color: #10b981; margin-bottom: 8px;">
-                    🎉 Success!
-                </div>
-                <div style="color: #666; font-size: 15px; margin-bottom: 15px;" id="resultDescription">
-                    Vocals removed successfully
-                </div>
+                <div style="font-size: 20px; font-weight: 600; color: #10b981; margin-bottom: 8px;">🎉 Success!</div>
+                <div style="color: #666; font-size: 15px; margin-bottom: 15px;" id="resultDescription">Vocals removed successfully</div>
             </div>
-            <div style="text-align: center;">
-                <a href="#" class="download-btn" id="downloadBtn" download>
-                    Download Your Result
-                </a>
-                <div style="margin-top: 12px; font-size: 13px; color: #666;" id="remainingInfo">
-                </div>
-            </div>
+            <a href="#" class="download-btn" id="downloadBtn" download>Download Your Result</a>
+            <div style="margin-top: 12px; font-size: 13px; color: #666;" id="remainingInfo"></div>
         </div>
-        
+
         <footer style="text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; color: #666; font-size: 12px;">
             <div>© 2025 MuteOne™. All rights reserved.</div>
         </footer>
     </div>
 
     <script>
-        // Global variables
+        // Global state
         let selectedFile = null;
         let selectedInstrument = 'voice';
         let audioDuration = 0;
-        let remainingUploads = 3;
         let currentUploadId = null;
         let pollingInterval = null;
         let isProcessing = false;
-        
-        // Network detection
-        let networkType = 'unknown';
-        let isSlowConnection = false;
-        
-        // DOM elements
+        let remainingUploads = 3;
+
+        // DOM references
         const uploadArea = document.getElementById('uploadArea');
         const fileInput = document.getElementById('fileInput');
         const fileInfo = document.getElementById('fileInfo');
@@ -445,463 +220,192 @@
         const usageInfo = document.getElementById('usageInfo');
         const remainingInfo = document.getElementById('remainingInfo');
         const networkWarning = document.getElementById('networkWarning');
-        
-        // Initialize
-        detectConnection();
-        checkUsageLimit();
 
-        // Network detection
-        function detectConnection() {
-            if ('connection' in navigator) {
-                const connection = navigator.connection;
-                networkType = connection.effectiveType || connection.type || 'unknown';
-                isSlowConnection = ['slow-2g', '2g'].includes(networkType);
-                
-                if (isSlowConnection) {
-                    showNetworkWarning('Slow connection detected. Processing may take longer than usual.');
-                }
-                
-                // Listen for connection changes
-                connection.addEventListener('change', () => {
-                    networkType = connection.effectiveType || connection.type || 'unknown';
-                    isSlowConnection = ['slow-2g', '2g'].includes(networkType);
-                    
-                    if (isProcessing) {
-                        updateNetworkStatus();
-                    }
-                });
-            }
-        }
-        
-        function showNetworkWarning(message) {
-            networkWarning.textContent = message;
-            networkWarning.style.display = 'block';
-            
-            setTimeout(() => {
-                networkWarning.style.display = 'none';
-            }, 8000);
-        }
-        
-        function updateNetworkStatus() {
-            if (isProcessing) {
-                let statusText = '';
-                if (networkType === 'slow-2g' || networkType === '2g') {
-                    statusText = 'Slow connection detected - processing may take longer';
-                } else if (networkType === '3g') {
-                    statusText = 'Good connection - processing normally';
-                } else if (networkType === '4g') {
-                    statusText = 'Fast connection detected';
-                } else {
-                    statusText = 'Connection status: ' + networkType;
-                }
-                networkStatus.textContent = statusText;
-            }
-        }
-
-        // Android-friendly fetch with proper timeout and retry
-        async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
-            const controller = new AbortController();
-            
-            // Set timeout
-            const timeoutId = setTimeout(() => {
-                controller.abort();
-            }, timeoutMs);
-            
-            try {
-                const response = await fetch(url, {
-                    ...options,
-                    signal: controller.signal
-                });
-                
-                clearTimeout(timeoutId);
-                return response;
-            } catch (error) {
-                clearTimeout(timeoutId);
-                
-                if (error.name === 'AbortError') {
-                    throw new Error('Request timed out. Please check your connection and try again.');
-                }
-                throw error;
-            }
-        }
-
-        async function fetchWithRetry(url, options = {}, maxRetries = 3) {
-            let lastError;
-            
-            for (let attempt = 0; attempt < maxRetries; attempt++) {
-                try {
-                    // Increase timeout for each retry
-                    const timeout = 30000 + (attempt * 15000); // 30s, 45s, 60s
-                    const response = await fetchWithTimeout(url, options, timeout);
-                    
-                    if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                    }
-                    
-                    return response;
-                } catch (error) {
-                    lastError = error;
-                    console.warn(`Attempt ${attempt + 1} failed:`, error.message);
-                    
-                    if (attempt < maxRetries - 1) {
-                        // Wait before retry with exponential backoff
-                        const delay = Math.min(1000 * Math.pow(2, attempt), 5000);
-                        await new Promise(resolve => setTimeout(resolve, delay));
-                    }
-                }
-            }
-            
-            throw lastError;
-        }
-
-        // Usage limit checking
-        async function checkUsageLimit() {
-            try {
-                const response = await fetchWithRetry('/api/separate', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ action: 'check_limit' })
-                });
-                
-                const data = await response.json();
-                
-                if (data.remaining !== undefined) {
-                    remainingUploads = data.remaining;
-                    updateUsageInfo();
-                }
-            } catch (error) {
-                console.warn('Failed to check usage limit:', error);
-                usageInfo.textContent = 'Unable to load usage info';
-            }
-        }
-        
-        function updateUsageInfo() {
-            if (remainingUploads > 0) {
-                usageInfo.textContent = `${remainingUploads} uploads remaining today`;
-            } else {
-                usageInfo.textContent = 'Daily limit reached - try again tomorrow';
-            }
-        }
-
-        // File handling
+        // ---------- File handling ----------
         uploadArea.addEventListener('click', () => fileInput.click());
-        
-        uploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadArea.classList.add('dragover');
+        uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+        uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+        uploadArea.addEventListener('drop', e => {
+            e.preventDefault(); uploadArea.classList.remove('dragover');
+            if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
         });
-        
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.classList.remove('dragover');
-        });
-        
-        uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadArea.classList.remove('dragover');
-            if (e.dataTransfer.files.length) {
-                handleFile(e.dataTransfer.files[0]);
-            }
-        });
-        
-        fileInput.addEventListener('change', (e) => {
-            if (e.target.files.length) {
-                handleFile(e.target.files[0]);
-            }
-        });
+        fileInput.addEventListener('change', e => { if (e.target.files.length) handleFile(e.target.files[0]); });
 
-        // File validation and audio duration detection
         async function handleFile(file) {
             hideError();
-            
-            // Basic validation
-            const allowedTypes = ['audio/mpeg', 'audio/wav', 'audio/flac', 'audio/mp4', 'audio/m4a', 'audio/x-m4a'];
-            if (!allowedTypes.includes(file.type)) {
-                showError('Unsupported file type. Please use MP3, WAV, FLAC, or M4A files.');
-                return;
-            }
-            
-            // File size check (80MB)
-            const maxSize = 80 * 1024 * 1024;
-            if (file.size > maxSize) {
-                showError(`File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum size is 80MB.`);
-                return;
-            }
-            
+            const allowedTypes = ['audio/mpeg','audio/wav','audio/flac','audio/mp4','audio/m4a','audio/x-m4a'];
+            if (!allowedTypes.includes(file.type)) { showError("Unsupported file type."); return; }
+            if (file.size > 80 * 1024 * 1024) { showError("File too large (max 80MB)"); return; }
+
             selectedFile = file;
             fileName.textContent = file.name;
-            fileDetails.textContent = `${(file.size / 1024 / 1024).toFixed(2)} MB`;
+            fileDetails.textContent = (file.size/1024/1024).toFixed(2)+" MB";
             fileInfo.style.display = 'block';
-            
-            // Get audio duration
+
             try {
                 audioDuration = await getAudioDuration(file);
-                updateDurationInfo();
-                
-                if (audioDuration <= 300) {
-                    processBtn.disabled = false;
-                    processBtn.textContent = 'Process Audio';
-                } else {
+                const m = Math.floor(audioDuration/60), s = Math.floor(audioDuration%60);
+                durationInfo.textContent = `Duration: ${m}:${s.toString().padStart(2,'0')}`;
+                if (audioDuration > 300) {
+                    durationInfo.className = 'duration-info duration-error';
                     processBtn.disabled = true;
-                    processBtn.textContent = 'File too long (5 minute limit)';
+                    processBtn.textContent = 'File too long (5 min limit)';
+                    return;
+                } else {
+                    durationInfo.className = 'duration-info';
                 }
-            } catch (error) {
-                console.warn('Could not detect duration:', error);
-                durationInfo.textContent = 'Duration: Unable to detect';
-                durationInfo.className = 'duration-info duration-warning';
-                
-                // Allow processing but warn user
-                processBtn.disabled = false;
-                processBtn.textContent = 'Process Audio (duration unknown)';
+            } catch {
+                durationInfo.textContent = "Duration unknown";
+                durationInfo.className = "duration-info duration-warning";
             }
+            processBtn.disabled = false;
+            processBtn.textContent = "Process Audio";
         }
-        
-        function updateDurationInfo() {
-            const minutes = Math.floor(audioDuration / 60);
-            const seconds = Math.floor(audioDuration % 60);
-            const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-            
-            if (audioDuration <= 300) {
-                durationInfo.textContent = `Duration: ${timeStr}`;
-                durationInfo.className = 'duration-info';
-            } else {
-                durationInfo.textContent = `Duration: ${timeStr} (exceeds 5 minute limit)`;
-                durationInfo.className = 'duration-info duration-error';
-            }
-        }
-        
-        async function getAudioDuration(file) {
+
+        function getAudioDuration(file) {
             return new Promise((resolve, reject) => {
                 const audio = new Audio();
-                
-                audio.addEventListener('loadedmetadata', () => {
-                    resolve(audio.duration);
-                });
-                
-                audio.addEventListener('error', () => {
-                    reject(new Error('Could not load audio metadata'));
-                });
-                
-                // Set timeout for duration detection
-                setTimeout(() => {
-                    reject(new Error('Duration detection timeout'));
-                }, 10000);
-                
+                audio.addEventListener('loadedmetadata', () => resolve(audio.duration));
+                audio.addEventListener('error', () => reject());
                 audio.src = URL.createObjectURL(file);
+                setTimeout(()=>reject(),10000);
             });
         }
 
-        // Instrument selection
-        document.querySelectorAll('.instrument-option').forEach(option => {
-            option.addEventListener('click', () => {
-                document.querySelectorAll('.instrument-option').forEach(opt => 
-                    opt.classList.remove('selected')
-                );
-                option.classList.add('selected');
-                selectedInstrument = option.getAttribute('data-instrument');
+        // ---------- Instrument selection ----------
+        document.querySelectorAll('.instrument-option').forEach(opt => {
+            opt.addEventListener('click', () => {
+                document.querySelectorAll('.instrument-option').forEach(o => o.classList.remove('selected'));
+                opt.classList.add('selected');
+                selectedInstrument = opt.dataset.instrument;
             });
         });
 
-        // Processing
+        // ---------- Processing ----------
         processBtn.addEventListener('click', async () => {
-            if (!selectedFile || remainingUploads <= 0) return;
-            
+            if (!selectedFile || isProcessing || remainingUploads<=0) return;
             await startProcessing();
         });
-        
+
         async function startProcessing() {
-            if (isProcessing) return;
-            
-            isProcessing = true;
-            processBtn.disabled = true;
-            progress.style.display = 'block';
-            result.style.display = 'none';
-            hideError();
-            updateNetworkStatus();
-            
-            progressFill.style.width = '10%';
-            progressText.textContent = 'Preparing upload...';
-            
             try {
-                // Step 1: Get upload authorization
-                const authResponse = await fetchWithRetry('/api/separate', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        action: 'upload',
-                        filename: selectedFile.name,
-                        stem: selectedInstrument,
-                        fileSize: selectedFile.size,
-                        estimatedDuration: audioDuration
-                    })
+                isProcessing = true;
+                processBtn.disabled = true;
+                result.style.display = 'none';
+                progress.style.display = 'block';
+                showProgress(10,"Requesting authorization...");
+
+                // Step 1: get auth header
+                const authRes = await fetch('/api/separate',{
+                    method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({action:'upload', filename:selectedFile.name, stem:selectedInstrument})
                 });
-                
-                const authData = await authResponse.json();
-                
-                if (!authResponse.ok) {
-                    throw new Error(authData.message || authData.error || 'Upload authorization failed');
-                }
-                
-                progressFill.style.width = '20%';
-                progressText.textContent = 'Uploading file...';
-                
-                // Step 2: Upload directly to LALAL.AI (simple approach)
+                const authData = await authRes.json();
+                if(!authRes.ok) throw new Error(authData.error||"Auth failed");
+
+                // Step 2: upload file directly
+                showProgress(30,"Uploading file...");
                 const formData = new FormData();
-                formData.append('audio_file', selectedFile);
-                
-                console.log('Uploading with auth header:', authData.auth_header);
-                console.log('File name:', selectedFile.name, 'Size:', selectedFile.size);
-                
-                const uploadResponse = await fetchWithRetry('https://www.lalal.ai/api/upload/', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': authData.auth_header
-                    },
+                formData.append("audio_file", selectedFile);
+                const uploadRes = await fetch("https://www.lalal.ai/api/upload/",{
+                    method:"POST",
+                    headers:{ Authorization: authData.auth_header },
                     body: formData
                 });
-                
-                const uploadResult = await uploadResponse.json();
-                console.log('Upload result:', uploadResult);
-                
-                if (!uploadResponse.ok || uploadResult.status !== 'success') {
-                    console.error('Upload failed:', uploadResult);
-                    throw new Error(uploadResult.message || uploadResult.error || `Upload failed: ${uploadResponse.status} ${uploadResponse.statusText}`);
-                }
-                
+                const uploadResult = await uploadRes.json();
+                if(uploadResult.status!=="success") throw new Error(uploadResult.error||"Upload failed");
                 currentUploadId = uploadResult.id;
-                progressFill.style.width = '40%';
-                progressText.textContent = 'Starting processing...';
-                
-                // Step 3: Start processing
-                const processResponse = await fetchWithRetry('/api/separate', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        action: 'process',
-                        uploadId: currentUploadId,
-                        stem: selectedInstrument
-                    })
+
+                // Step 3: notify backend
+                showProgress(50,"Starting processing...");
+                await fetch('/api/separate',{
+                    method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({action:'process', uploadId:currentUploadId, stem:selectedInstrument})
                 });
-                
-                const processData = await processResponse.json();
-                
-                if (!processResponse.ok) {
-                    throw new Error(processData.message || processData.error || 'Processing failed to start');
-                }
-                
-                progressFill.style.width = '50%';
-                progressText.textContent = 'Processing audio...';
-                
-                // Step 4: Poll for completion
-                await pollForCompletion();
-                
-            } catch (error) {
-                console.error('Processing error:', error);
-                showError(error.message || 'An error occurred during processing');
+
+                // Step 4: poll
+                pollForCompletion();
+            } catch(err) {
+                showError(err.message);
                 resetProcessing();
             }
         }
-        
-        async function pollForCompletion() {
-            const maxAttempts = 60; // 5 minutes max
+
+        function pollForCompletion() {
             let attempts = 0;
-            
             pollingInterval = setInterval(async () => {
                 attempts++;
-                
-                if (attempts > maxAttempts) {
+                if(attempts>60) {
                     clearInterval(pollingInterval);
-                    showError('Processing timed out. Please try again.');
+                    showError("Timed out");
                     resetProcessing();
                     return;
                 }
-                
                 try {
-                    const statusResponse = await fetchWithRetry('/api/separate', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            action: 'check_status',
-                            uploadId: currentUploadId
-                        })
+                    const res = await fetch('/api/separate',{
+                        method:'POST',
+                        headers:{'Content-Type':'application/json'},
+                        body:JSON.stringify({action:'check_status', uploadId:currentUploadId})
                     });
-                    
-                    const statusData = await statusResponse.json();
-                    
-                    if (!statusResponse.ok) {
-                        throw new Error(statusData.message || statusData.error || 'Status check failed');
-                    }
-                    
-                    if (statusData.processing) {
-                        // Still processing
-                        const progress = Math.min(90, 50 + (attempts * 2));
-                        progressFill.style.width = progress + '%';
-                        progressText.textContent = statusData.message || 'Processing audio...';
-                    } else if (statusData.ok) {
-                        // Success!
+                    const data = await res.json();
+                    if(data.processing) {
+                        showProgress(Math.min(90,50+attempts*2), data.message||"Processing...");
+                    } else if(data.ok) {
                         clearInterval(pollingInterval);
-                        
-                        progressFill.style.width = '100%';
-                        progressText.textContent = 'Complete!';
-                        
-                        // Update remaining uploads
-                        remainingUploads = statusData.remaining_uploads || 0;
+                        showProgress(100,"Complete!");
+                        remainingUploads = data.remaining_uploads ?? remainingUploads-1;
                         updateUsageInfo();
-                        
-                        // Show result
-                        showResult(statusData);
+                        result.style.display='block';
+                        resultDescription.textContent=data.message;
+                        downloadBtn.href=data.back_track_url;
+                        downloadBtn.download=selectedFile.name.replace(/\.[^/.]+$/, '')+"_processed.mp3";
                         resetProcessing();
                     }
-                    
-                } catch (error) {
+                } catch(e) {
                     clearInterval(pollingInterval);
-                    showError(error.message || 'Status check failed');
+                    showError(e.message);
                     resetProcessing();
                 }
-                
-            }, 5000); // Check every 5 seconds
+            },5000);
         }
-        
-        function showResult(data) {
-            resultDescription.textContent = data.message || `${selectedInstrument} removed successfully`;
-            downloadBtn.href = data.back_track_url;
-            downloadBtn.download = selectedFile.name.replace(/\.[^/.]+$/, '') + '_processed.mp3';
-            
-            if (data.remaining_uploads !== undefined) {
-                remainingInfo.textContent = `${data.remaining_uploads} uploads remaining today`;
-            }
-            
-            result.style.display = 'block';
-            progress.style.display = 'none';
+
+        function updateUsageInfo() {
+            if(remainingUploads>0) usageInfo.textContent = `${remainingUploads} uploads remaining today`;
+            else usageInfo.textContent = "Daily limit reached - try again tomorrow";
+            remainingInfo.textContent = usageInfo.textContent;
         }
-        
-        function resetProcessing() {
-            isProcessing = false;
-            processBtn.disabled = false;
-            processBtn.textContent = 'Process Audio';
-            progress.style.display = 'none';
-            
-            if (pollingInterval) {
-                clearInterval(pollingInterval);
-                pollingInterval = null;
-            }
+
+        function showProgress(percent,text) {
+            progressFill.style.width = percent+"%";
+            progressText.textContent = text;
         }
-        
-        function showError(message) {
-            errorMessage.textContent = message;
+        function showError(msg) {
+            errorMessage.textContent = msg;
             errorMessage.style.display = 'block';
         }
-        
-        function hideError() {
-            errorMessage.style.display = 'none';
+        function hideError() { errorMessage.style.display='none'; }
+        function resetProcessing() {
+            isProcessing=false;
+            processBtn.disabled=false;
+            processBtn.textContent="Process Audio";
+            progress.style.display='none';
+            if(pollingInterval) { clearInterval(pollingInterval); pollingInterval=null; }
         }
+
+        // ---------- Initial usage check ----------
+        async function checkUsageLimit() {
+            try {
+                const res = await fetch('/api/separate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'check_limit'})});
+                const data = await res.json();
+                if(data.remaining!==undefined) {
+                    remainingUploads = data.remaining;
+                    updateUsageInfo();
+                }
+            } catch { usageInfo.textContent = "Unable to load usage info"; }
+        }
+        checkUsageLimit();
     </script>
 </body>
 </html>
