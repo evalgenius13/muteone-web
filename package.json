@@ -1,7 +1,10 @@
 {
   "name": "muteone",
   "version": "1.0.0",
+  "type": "module",
   "dependencies": {
-    "node-fetch": "^2.6.7"
+    "node-fetch": "^2.6.7",
+    "formidable": "^3.5.1",
+    "form-data": "^4.0.0"
   }
 }
