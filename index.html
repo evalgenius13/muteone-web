@@ -553,3 +553,350 @@
             
             throw lastError;
         }
+
+        // Usage limit checking
+        async function checkUsageLimit() {
+            try {
+                const response = await fetchWithRetry('/api/separate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ action: 'check_limit' })
+                });
+                
+                const data = await response.json();
+                
+                if (data.remaining !== undefined) {
+                    remainingUploads = data.remaining;
+                    updateUsageInfo();
+                }
+            } catch (error) {
+                console.warn('Failed to check usage limit:', error);
+                usageInfo.textContent = 'Unable to load usage info';
+            }
+        }
+        
+        function updateUsageInfo() {
+            if (remainingUploads > 0) {
+                usageInfo.textContent = `${remainingUploads} uploads remaining today`;
+            } else {
+                usageInfo.textContent = 'Daily limit reached - try again tomorrow';
+            }
+        }
+
+        // File handling
+        uploadArea.addEventListener('click', () => fileInput.click());
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            if (e.dataTransfer.files.length) {
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+        
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        // File validation and audio duration detection
+        async function handleFile(file) {
+            hideError();
+            
+            // Basic validation
+            const allowedTypes = ['audio/mpeg', 'audio/wav', 'audio/flac', 'audio/mp4', 'audio/m4a', 'audio/x-m4a'];
+            if (!allowedTypes.includes(file.type)) {
+                showError('Unsupported file type. Please use MP3, WAV, FLAC, or M4A files.');
+                return;
+            }
+            
+            // File size check (80MB)
+            const maxSize = 80 * 1024 * 1024;
+            if (file.size > maxSize) {
+                showError(`File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum size is 80MB.`);
+                return;
+            }
+            
+            selectedFile = file;
+            fileName.textContent = file.name;
+            fileDetails.textContent = `${(file.size / 1024 / 1024).toFixed(2)} MB`;
+            fileInfo.style.display = 'block';
+            
+            // Get audio duration
+            try {
+                audioDuration = await getAudioDuration(file);
+                updateDurationInfo();
+                
+                if (audioDuration <= 300) {
+                    processBtn.disabled = false;
+                    processBtn.textContent = 'Process Audio';
+                } else {
+                    processBtn.disabled = true;
+                    processBtn.textContent = 'File too long (5 minute limit)';
+                }
+            } catch (error) {
+                console.warn('Could not detect duration:', error);
+                durationInfo.textContent = 'Duration: Unable to detect';
+                durationInfo.className = 'duration-info duration-warning';
+                
+                // Allow processing but warn user
+                processBtn.disabled = false;
+                processBtn.textContent = 'Process Audio (duration unknown)';
+            }
+        }
+        
+        function updateDurationInfo() {
+            const minutes = Math.floor(audioDuration / 60);
+            const seconds = Math.floor(audioDuration % 60);
+            const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            
+            if (audioDuration <= 300) {
+                durationInfo.textContent = `Duration: ${timeStr}`;
+                durationInfo.className = 'duration-info';
+            } else {
+                durationInfo.textContent = `Duration: ${timeStr} (exceeds 5 minute limit)`;
+                durationInfo.className = 'duration-info duration-error';
+            }
+        }
+        
+        async function getAudioDuration(file) {
+            return new Promise((resolve, reject) => {
+                const audio = new Audio();
+                
+                audio.addEventListener('loadedmetadata', () => {
+                    resolve(audio.duration);
+                });
+                
+                audio.addEventListener('error', () => {
+                    reject(new Error('Could not load audio metadata'));
+                });
+                
+                // Set timeout for duration detection
+                setTimeout(() => {
+                    reject(new Error('Duration detection timeout'));
+                }, 10000);
+                
+                audio.src = URL.createObjectURL(file);
+            });
+        }
+
+        // Instrument selection
+        document.querySelectorAll('.instrument-option').forEach(option => {
+            option.addEventListener('click', () => {
+                document.querySelectorAll('.instrument-option').forEach(opt => 
+                    opt.classList.remove('selected')
+                );
+                option.classList.add('selected');
+                selectedInstrument = option.getAttribute('data-instrument');
+            });
+        });
+
+        // Processing
+        processBtn.addEventListener('click', async () => {
+            if (!selectedFile || remainingUploads <= 0) return;
+            
+            await startProcessing();
+        });
+        
+        async function startProcessing() {
+            if (isProcessing) return;
+            
+            isProcessing = true;
+            processBtn.disabled = true;
+            progress.style.display = 'block';
+            result.style.display = 'none';
+            hideError();
+            updateNetworkStatus();
+            
+            progressFill.style.width = '10%';
+            progressText.textContent = 'Preparing upload...';
+            
+            try {
+                // Step 1: Get upload authorization
+                const authResponse = await fetchWithRetry('/api/separate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        action: 'upload',
+                        filename: selectedFile.name,
+                        stem: selectedInstrument,
+                        fileSize: selectedFile.size,
+                        estimatedDuration: audioDuration
+                    })
+                });
+                
+                const authData = await authResponse.json();
+                
+                if (!authResponse.ok) {
+                    throw new Error(authData.message || authData.error || 'Upload authorization failed');
+                }
+                
+                progressFill.style.width = '20%';
+                progressText.textContent = 'Uploading file...';
+                
+                // Step 2: Upload to LALAL.AI
+                const formData = new FormData();
+                formData.append('audio_file', selectedFile);
+                
+                const uploadResponse = await fetchWithRetry('https://www.lalal.ai/api/upload/', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': authData.auth_header
+                    },
+                    body: formData
+                });
+                
+                const uploadResult = await uploadResponse.json();
+                
+                if (!uploadResponse.ok || uploadResult.status !== 'success') {
+                    throw new Error('File upload failed');
+                }
+                
+                currentUploadId = uploadResult.id;
+                progressFill.style.width = '40%';
+                progressText.textContent = 'Starting processing...';
+                
+                // Step 3: Start processing
+                const processResponse = await fetchWithRetry('/api/separate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        action: 'process',
+                        uploadId: currentUploadId,
+                        stem: selectedInstrument
+                    })
+                });
+                
+                const processData = await processResponse.json();
+                
+                if (!processResponse.ok) {
+                    throw new Error(processData.message || processData.error || 'Processing failed to start');
+                }
+                
+                progressFill.style.width = '50%';
+                progressText.textContent = 'Processing audio...';
+                
+                // Step 4: Poll for completion
+                await pollForCompletion();
+                
+            } catch (error) {
+                console.error('Processing error:', error);
+                showError(error.message || 'An error occurred during processing');
+                resetProcessing();
+            }
+        }
+        
+        async function pollForCompletion() {
+            const maxAttempts = 60; // 5 minutes max
+            let attempts = 0;
+            
+            pollingInterval = setInterval(async () => {
+                attempts++;
+                
+                if (attempts > maxAttempts) {
+                    clearInterval(pollingInterval);
+                    showError('Processing timed out. Please try again.');
+                    resetProcessing();
+                    return;
+                }
+                
+                try {
+                    const statusResponse = await fetchWithRetry('/api/separate', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            action: 'check_status',
+                            uploadId: currentUploadId
+                        })
+                    });
+                    
+                    const statusData = await statusResponse.json();
+                    
+                    if (!statusResponse.ok) {
+                        throw new Error(statusData.message || statusData.error || 'Status check failed');
+                    }
+                    
+                    if (statusData.processing) {
+                        // Still processing
+                        const progress = Math.min(90, 50 + (attempts * 2));
+                        progressFill.style.width = progress + '%';
+                        progressText.textContent = statusData.message || 'Processing audio...';
+                    } else if (statusData.ok) {
+                        // Success!
+                        clearInterval(pollingInterval);
+                        
+                        progressFill.style.width = '100%';
+                        progressText.textContent = 'Complete!';
+                        
+                        // Update remaining uploads
+                        remainingUploads = statusData.remaining_uploads || 0;
+                        updateUsageInfo();
+                        
+                        // Show result
+                        showResult(statusData);
+                        resetProcessing();
+                    }
+                    
+                } catch (error) {
+                    clearInterval(pollingInterval);
+                    showError(error.message || 'Status check failed');
+                    resetProcessing();
+                }
+                
+            }, 5000); // Check every 5 seconds
+        }
+        
+        function showResult(data) {
+            resultDescription.textContent = data.message || `${selectedInstrument} removed successfully`;
+            downloadBtn.href = data.back_track_url;
+            downloadBtn.download = selectedFile.name.replace(/\.[^/.]+$/, '') + '_processed.mp3';
+            
+            if (data.remaining_uploads !== undefined) {
+                remainingInfo.textContent = `${data.remaining_uploads} uploads remaining today`;
+            }
+            
+            result.style.display = 'block';
+            progress.style.display = 'none';
+        }
+        
+        function resetProcessing() {
+            isProcessing = false;
+            processBtn.disabled = false;
+            processBtn.textContent = 'Process Audio';
+            progress.style.display = 'none';
+            
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+                pollingInterval = null;
+            }
+        }
+        
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+        }
+        
+        function hideError() {
+            errorMessage.style.display = 'none';
+        }
+    </script>
+</body>
+</html>
