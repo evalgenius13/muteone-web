@@ -748,16 +748,18 @@
                 progressFill.style.width = '20%';
                 progressText.textContent = 'Uploading file...';
                 
-                // Step 2: Upload directly to LALAL.AI
+                // Step 2: Upload directly to LALAL.AI with proper headers
                 const formData = new FormData();
-                formData.append('audio_file', selectedFile);
+                formData.append('audio_file', selectedFile, selectedFile.name);
                 
                 console.log('Uploading with auth header:', authData.auth_header);
+                console.log('File name:', selectedFile.name, 'Size:', selectedFile.size);
                 
                 const uploadResponse = await fetchWithRetry('https://www.lalal.ai/api/upload/', {
                     method: 'POST',
                     headers: {
-                        'Authorization': authData.auth_header
+                        'Authorization': authData.auth_header,
+                        // Don't set Content-Type - let browser set it with boundary for multipart
                     },
                     body: formData
                 });
