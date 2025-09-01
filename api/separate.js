@@ -82,6 +82,20 @@ export default async function handler(req, res) {
   try {
     const { action, uploadId, filename, fileSize, estimatedDuration, stem } = req.body;
 
+    // Get file info (for Chrome extension integration)
+    if (action === "get_info") {
+      if (!uploadId || !uploads.has(uploadId)) {
+        return res.status(404).json({ error: "Upload not found" });
+      }
+      const file = uploads.get(uploadId);
+      return res.status(200).json({
+        filename: file.filename,
+        size: file.size,
+        duration: file.duration || 0,
+        type: "Audio file"
+      });
+    }
+
     // Check limit action - returns usage info
     if (action === "check_limit") {
       const rateCheck = checkRateLimit(ip);
