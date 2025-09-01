@@ -5,18 +5,23 @@ export const config = {
   api: { bodyParser: false } // required for formidable
 };
 
-export default async function handler(req, res) {
-  // CORS headers MUST be set first, before any other logic
+// Helper to set CORS headers
+function setCORSHeaders(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+}
+
+export default async function handler(req, res) {
+  setCORSHeaders(res);
 
   // Handle preflight OPTIONS request
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
-  
+
   if (req.method !== "POST") {
+    setCORSHeaders(res); // Just in case
     return res.status(405).json({ error: "Method not allowed" });
   }
 
@@ -24,6 +29,8 @@ export default async function handler(req, res) {
     const form = formidable({ multiples: false, keepExtensions: true });
 
     form.parse(req, (err, fields, files) => {
+      setCORSHeaders(res); // Set again in callback
+
       if (err) {
         console.error("Form parse error:", err);
         return res.status(500).json({ error: "File upload failed" });
@@ -54,6 +61,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ uploadId });
     });
   } catch (err) {
+    setCORSHeaders(res); // Set again for errors
     console.error("Receive error:", err);
     return res.status(500).json({ error: "Server error" });
   }
