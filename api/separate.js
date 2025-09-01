@@ -35,12 +35,14 @@ function checkRateLimit(ip) {
   if (data.processing) return { allowed: false, error: "Already processing", remaining: DAILY_LIMIT - data.count };
   return { allowed: data.count < DAILY_LIMIT, remaining: DAILY_LIMIT - data.count };
 }
+
 function setProcessing(ip, val) {
   const today = new Date().toDateString();
   const data = dailyUploads.get(ip) || { count: 0, date: today };
   data.processing = val;
   dailyUploads.set(ip, data);
 }
+
 function incrementRate(ip) {
   const today = new Date().toDateString();
   const data = dailyUploads.get(ip) || { count: 0, date: today, processing: false };
@@ -48,6 +50,7 @@ function incrementRate(ip) {
   data.processing = false;
   dailyUploads.set(ip, data);
 }
+
 function decrementRate(ip) {
   const data = dailyUploads.get(ip);
   if (data) {
@@ -79,28 +82,7 @@ export default async function handler(req, res) {
   try {
     const { action, uploadId, filename, fileSize, estimatedDuration, stem } = req.body;
 
-    // 🔹 Get file info (from uploads store)
-    if (action === "get_info") {
-      if (!uploadId || !uploads.has(uploadId)) {
-        return res.status(404).json({ error: "Upload not found" });
-      }
-      const file = uploads.get(uploadId);
-      return res.status(200).json({
-        filename: file.filename,
-        size: file.size,
-        type: "Audio file"
-      });
-    }
-
-    // 🔹 Upload action (manual uploads)
-    if (action === "upload") {
-      if (!filename || !fileSize) return res.status(400).json({ error: "Missing filename or fileSize" });
-      const newId = Math.random().toString(36).slice(2, 10);
-      uploads.set(newId, { filename, size: fileSize, uploadedAt: Date.now() });
-      return res.status(200).json({ uploadId: newId });
-    }
-
-    // 🔹 Check limit
+    // Check limit action - returns usage info
     if (action === "check_limit") {
       const rateCheck = checkRateLimit(ip);
       return res.status(200).json({
@@ -110,34 +92,51 @@ export default async function handler(req, res) {
       });
     }
 
-    // 🔹 Upload auth
-    if (action === "upload_auth") {
+    // Upload action - prepare for file upload (return auth header for direct upload)
+    if (action === "upload") {
+      if (!filename || !fileSize) {
+        return res.status(400).json({ error: "Missing filename or fileSize" });
+      }
+      
       const rateCheck = checkRateLimit(ip);
       if (!rateCheck.allowed) {
-        return res.status(429).json({ error: "Limit exceeded", remaining: rateCheck.remaining });
+        return res.status(429).json({ 
+          error: rateCheck.error || "Daily limit reached. Try again tomorrow.", 
+          remaining: rateCheck.remaining 
+        });
       }
-      if (fileSize && fileSize > 80 * 1024 * 1024) {
-        return res.status(413).json({ error: "File too large (>80MB)" });
+      
+      if (fileSize > 80 * 1024 * 1024) {
+        return res.status(413).json({ error: "File too large (over 80MB)" });
       }
+      
       if (estimatedDuration && estimatedDuration > MAX_DURATION_SECONDS) {
-        return res.status(413).json({ error: "Audio too long (>5 min)" });
+        return res.status(413).json({ error: "Audio too long (over 5 minutes)" });
       }
+      
+      // Mark as processing to prevent concurrent uploads
       setProcessing(ip, true);
-      return res.status(200).json({ auth_header: `license ${license}`, remaining: rateCheck.remaining - 1 });
+      
+      return res.status(200).json({ 
+        auth_header: `license ${license}`,
+        remaining: rateCheck.remaining - 1
+      });
     }
 
-    // 🔹 Process
+    // Process action - handle the separation after upload
     if (action === "process") {
-      if (!uploadId || !uploads.has(uploadId)) {
+      if (!uploadId) {
         setProcessing(ip, false);
         return res.status(400).json({ error: "Upload ID required" });
       }
+      
       if (!ALLOWED_STEMS.has(stem)) {
         setProcessing(ip, false);
         return res.status(400).json({ error: "Invalid stem" });
       }
 
       try {
+        // Step 1: Initiate processing on LALAL.AI
         const params = JSON.stringify([{ id: uploadId, stem }]);
         const splitResponse = await fetch("https://www.lalal.ai/api/split/", {
           method: "POST",
@@ -147,6 +146,7 @@ export default async function handler(req, res) {
           },
           body: new URLSearchParams({ params })
         });
+        
         const splitResult = await splitResponse.json().catch(() => ({}));
 
         if (splitResult?.status !== "success") {
@@ -154,9 +154,10 @@ export default async function handler(req, res) {
           return res.status(502).json({ error: "Processing initialization failed" });
         }
 
+        // Step 2: Poll for completion
         let attempt = 0;
         let processingResult = null;
-        const maxAttempts = 180;
+        const maxAttempts = 180; // 6 minutes maximum
 
         while (attempt < maxAttempts) {
           const checkResponse = await fetch("https://www.lalal.ai/api/check/", {
@@ -167,6 +168,7 @@ export default async function handler(req, res) {
             },
             body: new URLSearchParams({ id: uploadId })
           });
+          
           const checkResult = await checkResponse.json().catch(() => ({}));
           const taskInfo = checkResult?.result?.[uploadId];
           const taskState = taskInfo?.task?.state;
@@ -178,7 +180,9 @@ export default async function handler(req, res) {
             decrementRate(ip);
             return res.status(502).json({ error: "Processing failed" });
           }
-          await new Promise(r => setTimeout(r, 2000));
+          
+          // Wait 2 seconds before next check
+          await new Promise(resolve => setTimeout(resolve, 2000));
           attempt++;
         }
 
@@ -187,6 +191,7 @@ export default async function handler(req, res) {
           return res.status(504).json({ error: "Processing timeout" });
         }
 
+        // Success - increment usage and return result
         incrementRate(ip);
         const newRateCheck = checkRateLimit(ip);
 
@@ -198,6 +203,7 @@ export default async function handler(req, res) {
           stem_track_url: processingResult.stem_track,
           remaining_uploads: newRateCheck.remaining
         });
+        
       } catch (err) {
         console.error("Processing error:", err);
         decrementRate(ip);
@@ -206,6 +212,7 @@ export default async function handler(req, res) {
     }
 
     return res.status(400).json({ error: "Invalid action" });
+    
   } catch (err) {
     console.error("API error:", err);
     setProcessing(ip, false);
