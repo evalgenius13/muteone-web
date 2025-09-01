@@ -1,5 +1,5 @@
 import fetch from "node-fetch";
-import uploads from "../../lib/uploads.js";
+import uploads from "../lib/uploads.js";
 
 export const config = { api: { bodyParser: true } };
 
