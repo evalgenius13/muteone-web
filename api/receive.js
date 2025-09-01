@@ -6,12 +6,19 @@ export const config = {
 };
 
 export default async function handler(req, res) {
+  // CORS headers MUST be set first, before any other logic
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
-  if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  // Handle preflight OPTIONS request
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+  
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
 
   try {
     const form = formidable({ multiples: false, keepExtensions: true });
@@ -39,7 +46,7 @@ export default async function handler(req, res) {
         size,
         duration,
         storedAt: Date.now(),
-        filepath: file.filepath // temp storage (can move to /tmp or S3 later)
+        filepath: file.filepath
       });
 
       console.log(`✅ Received ${filename} (${size} bytes) → uploadId: ${uploadId}`);
